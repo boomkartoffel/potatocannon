@@ -3,7 +3,6 @@ package io.github.boomkartoffel.potatocannon
 import io.github.boomkartoffel.potatocannon.strategy.BasicAuth
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.strategy.ContentHeader
-import io.github.boomkartoffel.potatocannon.strategy.ContentType
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
 import io.github.boomkartoffel.potatocannon.cannon.Mode
 import io.github.boomkartoffel.potatocannon.potato.Expectation
@@ -11,6 +10,10 @@ import io.github.boomkartoffel.potatocannon.potato.HttpMethod
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.strategy.BearerAuth
+import io.github.boomkartoffel.potatocannon.strategy.CookieHeader
+import io.github.boomkartoffel.potatocannon.strategy.CustomHeader
+import io.github.boomkartoffel.potatocannon.strategy.LogExclude
+import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
 import org.junit.jupiter.api.*
@@ -52,9 +55,7 @@ class PotatoCannonTest {
         val potato = Potato(
             method = HttpMethod.GET,
             path = "/test",
-            configuration = listOf(
-                ResultVerification(expect)
-            )
+            ResultVerification(expect)
         )
 
 
@@ -74,12 +75,11 @@ class PotatoCannonTest {
             Potato(
                 method = HttpMethod.GET,
                 path = "/test-wait",
-                configuration = listOf(
-                    ResultVerification(is200),
-                    ResultVerification { result ->
-                        Assertions.assertEquals("Hello", result.responseText())
-                    }
-                )
+                ResultVerification(is200),
+                ResultVerification { result ->
+                    Assertions.assertEquals("Hello", result.responseText())
+                }
+
             )
         }
 
@@ -108,13 +108,12 @@ class PotatoCannonTest {
         val potatoes = (1..500).map {
             Potato(
                 method = HttpMethod.GET,
-                path = "/test-wait",
-                configuration = listOf(
-                    ResultVerification(is200),
-                    ResultVerification { result ->
-                        Assertions.assertEquals("Hello", result.responseText())
-                    }
-                )
+                path = "/test-wait-parallel",
+                ResultVerification(is200),
+                ResultVerification { result ->
+                    Assertions.assertEquals("Hello", result.responseText())
+                }
+
             )
         }
 
@@ -122,6 +121,7 @@ class PotatoCannonTest {
             baseUrl = "http://localhost:$port",
             configuration = listOf(
                 FireMode(Mode.Parallel),
+                Logging.OFF
             )
         )
 
@@ -138,15 +138,14 @@ class PotatoCannonTest {
     fun `POST request with some body is printed`() {
         val potato = Potato(
             method = HttpMethod.POST,
-            body = TextBody("{ }"),
             path = "/test",
-            configuration = mutableListOf(
-                ContentHeader(ContentType.JSON),
-                ResultVerification { result ->
-                    Assertions.assertEquals(200, result.statusCode)
-                    Assertions.assertEquals("Hello", result.responseText())
-                }
-            )
+            body = TextBody("{ }"),
+            ContentHeader.JSON,
+            ResultVerification { result ->
+                Assertions.assertEquals(200, result.statusCode)
+                Assertions.assertEquals("Hello", result.responseText())
+            }
+
         )
 
 
@@ -160,6 +159,68 @@ class PotatoCannonTest {
         cannon.fire(potato)
     }
 
+    @Test
+    fun `POST requests have correct logging`() {
+        val headers = listOf(
+            ContentHeader.JSON,
+            QueryParam("query", "value"),
+            BearerAuth("sometoken"),
+            CustomHeader("X-Custom-Header", "CustomValue"),
+            CookieHeader("1234567890abcdef")
+        )
+
+        val basePotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test-logging",
+            body = TextBody("{ }"),
+        )
+
+        val baseLoggingPotatoes = Logging.entries
+            .map { logging ->
+                basePotato.withConfiguration(
+                    headers + logging + ResultVerification(
+                        {
+                            println("⬆\uFE0F This was logging: $logging")
+                        }
+                    ))
+            }
+
+        val logExcludeCombinations = setOf(
+            listOf(),
+            listOf(LogExclude.HEADERS),
+            listOf(LogExclude.BODY),
+            listOf(LogExclude.QUERY_PARAMS),
+            listOf(LogExclude.SECURITY_HEADERS),
+            listOf(LogExclude.HEADERS, LogExclude.BODY),
+            listOf(LogExclude.HEADERS, LogExclude.QUERY_PARAMS),
+            listOf(LogExclude.HEADERS, LogExclude.SECURITY_HEADERS),
+            listOf(LogExclude.BODY, LogExclude.QUERY_PARAMS),
+            listOf(LogExclude.BODY, LogExclude.SECURITY_HEADERS),
+            listOf(LogExclude.QUERY_PARAMS, LogExclude.SECURITY_HEADERS),
+            listOf(LogExclude.HEADERS, LogExclude.BODY, LogExclude.QUERY_PARAMS),
+            listOf(LogExclude.HEADERS, LogExclude.BODY, LogExclude.SECURITY_HEADERS),
+            listOf(LogExclude.HEADERS, LogExclude.QUERY_PARAMS, LogExclude.SECURITY_HEADERS),
+            listOf(LogExclude.BODY, LogExclude.QUERY_PARAMS, LogExclude.SECURITY_HEADERS),
+            listOf(LogExclude.HEADERS, LogExclude.BODY, LogExclude.QUERY_PARAMS, LogExclude.SECURITY_HEADERS)
+        )
+
+        val baseLoggingPotatoesWithExcludes = logExcludeCombinations.map { logExcludes ->
+            basePotato.withConfiguration(
+                headers + Logging.FULL + logExcludes + ResultVerification(
+                    {
+                        println("⬆\uFE0F This was FULL logging with excludes: $logExcludes")
+                    })
+            )
+        }
+
+        val cannon = Cannon(
+            baseUrl = "http://localhost:$port",
+            FireMode(Mode.Sequential),
+        )
+
+        cannon.fire(baseLoggingPotatoes + baseLoggingPotatoesWithExcludes)
+    }
+
 
     @Test
     fun `POST with multiple headers will have later ones overwrite earlier`() {
@@ -168,8 +229,8 @@ class PotatoCannonTest {
             body = TextBody("{ }"),
             path = "/test",
             configuration = listOf(
-                ContentHeader(ContentType.JSON),
-                ContentHeader(ContentType.XML),
+                ContentHeader.JSON,
+                ContentHeader.XML,
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
@@ -208,8 +269,8 @@ class PotatoCannonTest {
             body = TextBody("{ }"),
             path = "/test",
             configuration = listOf(
-                ContentHeader(ContentType.JSON),
-                ContentHeader(ContentType.XML),
+                ContentHeader.JSON,
+                ContentHeader.XML,
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
@@ -235,6 +296,7 @@ class PotatoCannonTest {
                     username = "user",
                     password = "password"
                 ),
+                CustomHeader("X-Custom-Header", "CustomValue"),
                 ResultVerification(is200),
                 QueryParam("queryCannon", "valueCannon")
             )
@@ -248,11 +310,11 @@ class PotatoCannonTest {
         val potato = Potato(
             method = HttpMethod.POST,
             path = "/create-user",
-            configuration = listOf(
-                ContentHeader(ContentType.JSON),
-                ResultVerification(is200)
 
-            )
+            ContentHeader.JSON,
+            ResultVerification(is200)
+
+
         )
 
         val cannon = Cannon(
@@ -292,6 +354,31 @@ class PotatoCannonTest {
         )
 
         cannon.fire(potatoes)
+
+    }
+
+    @Test
+    fun `POST calls can be chained`() {
+        val cannon = Cannon(
+            baseUrl = "http://localhost:$port",
+        )
+
+        val firstPotato = Potato(
+            method = HttpMethod.POST,
+            path = "/first-call",
+            ResultVerification(is200)
+        )
+
+        val results = cannon.fire(firstPotato)
+
+        cannon.fire(
+            firstPotato
+                .withPath("/second-call")
+                .withConfiguration(
+                    QueryParam("number", results.first().responseText() ?: "0"),
+                    ResultVerification(is200)
+                )
+        )
 
     }
 

@@ -29,22 +29,34 @@ class Potato(
     val method: HttpMethod,
     val path: String,
     val body: PotatoBody?,
-    val configuration: List<PotatoConfiguration> = listOf(),
+    val configuration: List<PotatoConfiguration> = listOf()
 ) {
-    constructor(
-        method: HttpMethod,
-        path: String
-    ) : this(method, path, null, listOf())
 
     constructor(
         method: HttpMethod,
         path: String,
-        body: PotatoBody
-    ) : this(method, path, body, listOf())
+        vararg configuration: PotatoConfiguration
+    ) : this(method, path, null, configuration.toList())
 
     constructor(
         method: HttpMethod,
         path: String,
-        configuration: List<PotatoConfiguration>
-    ) : this(method, path, null, configuration)
+        body: PotatoBody,
+        vararg configuration: PotatoConfiguration
+    ) : this(method, path, body, configuration.toList())
+
+    fun withMethod(newMethod: HttpMethod): Potato =
+        Potato(newMethod, path, body, configuration)
+
+    fun withPath(newPath: String): Potato =
+        Potato(method, newPath, body, configuration)
+
+    fun withBody(newBody: PotatoBody?): Potato =
+        Potato(method, path, newBody, configuration)
+
+    fun withConfiguration(vararg newConfiguration: PotatoConfiguration): Potato =
+        Potato(method, path, body, newConfiguration.toList())
+
+    fun withConfiguration(newConfiguration: List<PotatoConfiguration>): Potato =
+        Potato(method, path, body, newConfiguration)
 }

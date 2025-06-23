@@ -8,7 +8,8 @@ import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.strategy.CannonConfiguration
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
 import io.github.boomkartoffel.potatocannon.strategy.HeaderStrategy
-import io.github.boomkartoffel.potatocannon.strategy.LoggingStrategy
+import io.github.boomkartoffel.potatocannon.strategy.LogExclude
+import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
 import java.net.URI
@@ -16,49 +17,64 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
+import java.util.Collections
 import java.util.concurrent.Executors
-
+import java.util.concurrent.TimeUnit
 
 
 class Cannon {
-    val baseUrl: String
-    val configuration: List<CannonConfiguration>
+    private val baseUrl: String
+    private val configuration: List<CannonConfiguration>
     private val client: HttpClient
 
     constructor(baseUrl: String) : this(baseUrl, listOf())
+
+    constructor(baseUrl: String, vararg configuration: CannonConfiguration) : this(baseUrl, configuration.toList())
 
     constructor(baseUrl: String, configuration: List<CannonConfiguration>) {
         this.baseUrl = baseUrl
         this.configuration = configuration
         this.client = HttpClient.newHttpClient()
-
     }
 
-    fun fire(vararg potatoes: Potato) {
-        fire(potatoes.toList())
+    fun fire(vararg potatoes: Potato): List<Result> {
+        return fire(potatoes.toList())
     }
 
-    fun fire(potatoes: List<Potato>) {
+    fun fire(potatoes: List<Potato>): List<Result> {
         val mode = configuration
             .filterIsInstance<FireMode>()
             .firstOrNull()?.mode ?: Mode.Sequential
 
-        when (mode) {
-            Mode.Sequential -> potatoes.forEach { fireOne(it) }
+        return when (mode) {
+            Mode.Sequential -> potatoes.map { fireOne(it) }
             Mode.Parallel -> fireParallel(potatoes)
         }
     }
 
-    fun fireParallel(potatoes: List<Potato>) {
+    private fun fireParallel(potatoes: List<Potato>): List<Result> {
+        val results = Collections.synchronizedList(mutableListOf<Result>())
         val pool = Executors.newFixedThreadPool(500)
-        val futures = potatoes.map {
-            pool.submit { fireOne(it) }
+
+        try {
+            val futures = potatoes.map { potato ->
+                pool.submit<Result> {
+                    val result = fireOne(potato)
+                    results.add(result)
+                    result
+                }
+            }
+
+            futures.forEach { it.get() } // Ensure all tasks are completed
+        } finally {
+            pool.shutdown()
+            pool.awaitTermination(1, TimeUnit.MINUTES)
         }
-        futures.forEach { it.get() }
-        pool.shutdown()
+
+        return results.toList()
     }
 
-    private fun fireOne(potato: Potato) {
+    private fun fireOne(potato: Potato): Result {
 
         val allQueryParams = mutableMapOf<String, List<String>>()
 
@@ -97,9 +113,13 @@ class Cannon {
             null -> builder.method(potato.method.name, BodyPublishers.noBody()).build()
         }
 
-        val loggingStrategy = configs
-            .filterIsInstance<LoggingStrategy>()
-            .lastOrNull() ?: LoggingStrategy.FULL
+        val baseLogging = configs
+            .filterIsInstance<Logging>()
+            .lastOrNull() ?: Logging.FULL
+
+        val logExcludes = configs
+            .filterIsInstance<LogExclude>()
+            .toSet()
 
         val start = System.currentTimeMillis()
 
@@ -119,11 +139,13 @@ class Cannon {
                 error = null
             )
 
-            result.log(loggingStrategy)
+            result.log(baseLogging, logExcludes)
 
             configs
                 .filterIsInstance<ResultVerification>()
                 .forEach { it.verify(result) }
+
+            return result
 
         } catch (e: Exception) {
             val result = Result(
@@ -138,11 +160,13 @@ class Cannon {
                 error = e
             )
 
-            result.log(loggingStrategy)
+            result.log(baseLogging, logExcludes)
 
             configs
                 .filterIsInstance<ResultVerification>()
                 .forEach { it.verify(result) }
+
+            return result
         }
     }
 }

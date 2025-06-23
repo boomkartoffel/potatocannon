@@ -34,17 +34,15 @@ class CookieHeader(val cookie: String) : HeaderStrategy {
     }
 }
 
-enum class ContentType(val mime: String) {
+enum class ContentHeader(val mime: String) : HeaderStrategy {
     JSON("application/json"),
     XML("application/xml"),
     FORM_URLENCODED("application/x-www-form-urlencoded"),
     TEXT_PLAIN("text/plain"),
     MULTIPART_FORM_DATA("multipart/form-data");
-}
 
-class ContentHeader(private val contentType: ContentType) : HeaderStrategy {
     override fun apply(headers: MutableMap<String, String>) {
-        headers["Content-Type"] = contentType.mime
+        headers["Content-Type"] = mime
     }
 }
 
@@ -58,14 +56,17 @@ class QueryParam(val key: String, val value: String) : PotatoConfiguration, Cann
     }
 }
 
-enum class LoggingStrategy {
-    NONE,
+sealed interface LoggingConfiguration: CannonConfiguration, PotatoConfiguration
+
+enum class Logging : LoggingConfiguration {
+    OFF,
     BASIC,
-    HEADERS,
-    SAFE_HEADERS, // Like HEADERS but masks or skips sensitive headers
-    BODY,
-    FULL
+    FULL;
 }
 
-
-class Logging(strategy: LoggingStrategy) : CannonConfiguration, PotatoConfiguration
+enum class LogExclude: LoggingConfiguration {
+    HEADERS,
+    QUERY_PARAMS,
+    BODY,
+    SECURITY_HEADERS; // Sensitive headers like Authorization, Cookie, etc.
+}

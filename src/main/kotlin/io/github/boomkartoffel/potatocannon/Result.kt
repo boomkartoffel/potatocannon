@@ -4,7 +4,8 @@ import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.potato.PotatoBody
 import io.github.boomkartoffel.potatocannon.potato.TextBody
-import io.github.boomkartoffel.potatocannon.strategy.LoggingStrategy
+import io.github.boomkartoffel.potatocannon.strategy.LogExclude
+import io.github.boomkartoffel.potatocannon.strategy.Logging
 import java.nio.charset.Charset
 
 class Result(
@@ -31,9 +32,9 @@ class Result(
         return responseText(Charsets.UTF_8)
     }
 
-    internal fun log(strategy: LoggingStrategy) {
+    internal fun log(strategy: Logging, logExcludes : Set<LogExclude>) {
 
-        if (strategy == LoggingStrategy.NONE) return
+        if (strategy == Logging.OFF) return
 
         val builder = StringBuilder()
 
@@ -45,21 +46,20 @@ class Result(
         builder.appendLine("   Path:    ${potato.path}")
         builder.appendLine("   Full URL: $fullUrl")
 
-        if (queryParams.isNotEmpty() && strategy >= LoggingStrategy.BASIC) {
+        if (queryParams.isNotEmpty() && strategy >= Logging.FULL  && logExcludes.none { it == LogExclude.QUERY_PARAMS }) {
             builder.appendLine("   Query Params:")
             queryParams.forEach { (key, values) ->
                 builder.appendLine("     $key: ${values.joinToString(", ")}")
             }
         }
 
-
-        if (requestHeaders.isNotEmpty() && strategy >= LoggingStrategy.HEADERS) {
+        if (requestHeaders.isNotEmpty() && strategy >= Logging.FULL  && logExcludes.none { it == LogExclude.HEADERS }) {
             builder.appendLine("   Headers:")
-            val mask = strategy <= LoggingStrategy.SAFE_HEADERS
+            val mask = logExcludes.any { it == LogExclude.SECURITY_HEADERS }
             builder.appendLine(requestHeaders.logFilteredHeaders(mask).joinToString("\n"))
         }
 
-        if (potato.body != null && strategy >= LoggingStrategy.BODY) {
+        if (potato.body != null && strategy >= Logging.FULL  && logExcludes.none { it == LogExclude.BODY }) {
             builder.appendLine("   Body:")
             builder.appendLine(potato.body.prettifyIndented())
         }
@@ -70,18 +70,19 @@ class Result(
         builder.appendLine("   Time:    ${durationMillis}ms")
 
 
-        if (responseHeaders.isNotEmpty() && strategy >= LoggingStrategy.SAFE_HEADERS) {
+        if (responseHeaders.isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }) {
             builder.appendLine("   Headers:")
-            val mask = strategy == LoggingStrategy.SAFE_HEADERS
+            val mask = logExcludes.any { it == LogExclude.SECURITY_HEADERS }
             builder.appendLine(responseHeaders.logFilteredHeaders(mask).joinToString("\n"))
         }
 
-        if (responseBody != null && strategy >= LoggingStrategy.BODY) {
+
+        if (responseBody != null && strategy >= Logging.FULL  && logExcludes.none { it == LogExclude.BODY }) {
             builder.appendLine("   Body:")
-            builder.appendLine(this.responseText()?.prettifyIndented())
+            builder.appendLine(responseText()?.prettifyIndented())
         }
 
-        if (error != null && strategy >= LoggingStrategy.BASIC) {
+        if (error != null && strategy >= Logging.BASIC ) {
             builder.appendLine()
             builder.appendLine("⚠️  Error:")
             builder.appendLine("   ${error::class.simpleName}: ${error.message}")
@@ -95,12 +96,16 @@ class Result(
 private fun Map<String, List<String>>.logFilteredHeaders(mask: Boolean): List<String> {
     return this.entries.mapNotNull { (key, values) ->
         val lowerKey = key.lowercase()
-        if (lowerKey in sensitiveHeaderNames) {
-            if (mask) "     $key: *****"
-            else null
+        val valuePrint = if (lowerKey in sensitiveHeaderNames && mask) {
+            "*****"
         } else {
-            "     $key: ${values.joinToString(", ")}"
+            values.joinToString(", ")
         }
+
+        return@mapNotNull if (values.isEmpty()) {
+            null // Skip empty headers
+        } else
+            "     $key: $valuePrint"
     }
 }
 
