@@ -11,6 +11,8 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
+import org.slf4j.bridge.SLF4JBridgeHandler
+import java.util.logging.LogManager
 
 
 @Serializable
@@ -21,9 +23,16 @@ data class User(
 )
 
 object TestBackend {
-    private var server: ApplicationEngine? = null
+    private var server: EmbeddedServer<*, *>? = null
 
     private var lastNumber: Int? = null
+
+    init {
+        // Remove existing handlers from JUL root logger -> this is to remove error logging from netty on shutdown and have the logback-test.xml apply
+        LogManager.getLogManager().reset()
+        SLF4JBridgeHandler.removeHandlersForRootLogger()
+        SLF4JBridgeHandler.install()
+    }
 
 
     fun start(port: Int) {
@@ -127,11 +136,16 @@ object TestBackend {
                     lastNumber = null
                 }
             }
-        }.start(wait = false)
+        }
+
+        server?.start(wait = false)
     }
 
     fun stop() {
-        server?.stop(1000, 2000)
+        server?.stop(
+            gracePeriodMillis = 1000,
+            timeoutMillis = 5000
+        )
         lastNumber = null
     }
 }

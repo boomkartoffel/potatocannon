@@ -6,32 +6,38 @@ plugins {
 group = "io.github.boomkartoffel"
 version = "1.0-SNAPSHOT"
 
+val ktorVersion = "3.2.0"
+val jacksonVersion = "2.19.1"
+val kotlinxSerializationVersion = "1.6.0"
+val junitJupiterVersion = "5.10.0"
+val kotestVersion = "5.8.1"
+val slf4jVersion = "2.0.13"
+
 repositories {
     mavenCentral()
 }
 
 dependencies {
-//    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.eclipse.jetty:jetty-client:12.0.22")
-    testImplementation(kotlin("test"))
-    testImplementation("io.ktor:ktor-server-core:2.3.7")
-    testImplementation("io.ktor:ktor-server-netty:2.3.7")
-    testImplementation("io.ktor:ktor-server-test-host:2.3.7") // optional
-    implementation("io.ktor:ktor-server-content-negotiation:2.3.7")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.1")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.19.1")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.19.1")
+    implementation("com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:${jacksonVersion}")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml:${jacksonVersion}")
 
+    testImplementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
+    testImplementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+    testImplementation("io.ktor:ktor-server-core:$ktorVersion")
+    testImplementation("io.ktor:ktor-server-netty:$ktorVersion")
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$kotlinxSerializationVersion")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
 
-    testImplementation("io.kotest:kotest-runner-junit5:5.8.1")
-    testImplementation("io.kotest:kotest-assertions-core:5.8.1")
-//    remove logger warning
-    testImplementation("org.slf4j:slf4j-nop:2.0.13")
+    testImplementation("io.kotest:kotest-runner-junit5:$kotestVersion")
+    testImplementation("io.kotest:kotest-assertions-core:$kotestVersion")
+
+    //this is to remove SLF4J(W): No SLF4J providers were found. error message
+    testImplementation("org.slf4j:slf4j-nop:$slf4jVersion")
+    //this is to remove netty logging errors on shutdown
+    testImplementation("org.slf4j:jul-to-slf4j:${slf4jVersion}")
 }
 
 tasks.test {
