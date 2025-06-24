@@ -1,20 +1,12 @@
 package io.github.boomkartoffel.potatocannon.result
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationFeature
-import com.fasterxml.jackson.dataformat.xml.XmlMapper
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.potato.PotatoBody
 import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
-import java.io.StringWriter
-import javax.xml.parsers.DocumentBuilderFactory
-import javax.xml.transform.OutputKeys
-import javax.xml.transform.TransformerFactory
-import javax.xml.transform.dom.DOMSource
-import javax.xml.transform.stream.StreamResult
 import kotlin.collections.component1
 import kotlin.collections.component2
 
