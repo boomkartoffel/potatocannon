@@ -2,15 +2,23 @@ package io.github.boomkartoffel.potatocannon
 
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.application.*
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.delay
-import java.util.Collections
-import java.util.Queue
-import java.util.concurrent.ConcurrentLinkedQueue
+import kotlinx.serialization.Serializable
+
+
+@Serializable
+data class User(
+    val id: Int,
+    val name: String,
+    val email: String
+)
 
 object TestBackend {
     private var server: ApplicationEngine? = null
@@ -21,6 +29,9 @@ object TestBackend {
     fun start(port: Int) {
 
         server = embeddedServer(Netty, port = port) {
+            install(ContentNegotiation) {
+                json()
+            }
             routing {
                 get("/test") {
                     call.respondText("Hello")
@@ -48,8 +59,53 @@ object TestBackend {
                     )
                     call.respondText("Hello")
                 }
+
                 post("/create-user") {
-                    call.respondText("1,Max Muser,max@muster.com")
+                    val user = User(1, "Max Muster", "max@muster.com")
+                    call.respond(user)
+                }
+
+                post("/create-user-list") {
+                    val user = User(1, "Max Muster", "max@muster.com")
+                    call.respond(listOf(user))
+                }
+
+                post("/create-user-xml") {
+                    val xml = """
+                                <User>
+                                    <id>1</id>
+                                    <name>Max Muster</name>
+                                    <email>max@muster.com</email>
+                                </User>
+                            """.trimIndent()
+                    call.respond(xml)
+                }
+
+                post("/create-user-xml-list") {
+                    val xml = """
+                                <Users>
+                                    <User>
+                                        <id>1</id>
+                                        <name>Max Muster</name>
+                                        <email>max@muster.com</email>
+                                    </User>
+                                </Users>
+                            """.trimIndent()
+                    call.respond(xml)
+                }
+
+                post("/create-user-custom") {
+                    val xml = """
+                                1,Max Muster,max@muster.com 
+                            """.trimIndent()
+                    call.respond(xml)
+                }
+
+                post("/create-user-custom-list") {
+                    val xml = """
+                                1,Max Muster,max@muster.com;
+                            """.trimIndent()
+                    call.respond(xml)
                 }
 
                 post("/first-call") {
@@ -63,7 +119,10 @@ object TestBackend {
                     if (receivedNumber != null && receivedNumber == lastNumber) {
                         call.respondText("OK", status = HttpStatusCode.OK)
                     } else {
-                        call.respondText("Mismatch or missing number, the true one is $lastNumber", status = HttpStatusCode.BadRequest)
+                        call.respondText(
+                            "Mismatch or missing number, the true one is $lastNumber",
+                            status = HttpStatusCode.BadRequest
+                        )
                     }
                     lastNumber = null
                 }

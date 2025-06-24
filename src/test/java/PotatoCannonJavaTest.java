@@ -37,7 +37,7 @@ public class PotatoCannonJavaTest {
         Cannon cannon = new Cannon(
                 "http://localhost:" + port,
                 List.of(
-                        new FireMode(Mode.Sequential),
+                        FireMode.SEQUENTIAL,
                         new ResultVerification(is200)
                 )
         );

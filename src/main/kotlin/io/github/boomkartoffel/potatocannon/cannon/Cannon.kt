@@ -1,10 +1,10 @@
 package io.github.boomkartoffel.potatocannon.cannon
 
 import io.github.boomkartoffel.potatocannon.potato.Potato
-import io.github.boomkartoffel.potatocannon.Result
+import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
-import io.github.boomkartoffel.potatocannon.potato.PotatoBody
 import io.github.boomkartoffel.potatocannon.potato.TextBody
+import io.github.boomkartoffel.potatocannon.result.log
 import io.github.boomkartoffel.potatocannon.strategy.CannonConfiguration
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
 import io.github.boomkartoffel.potatocannon.strategy.HeaderStrategy
@@ -13,6 +13,7 @@ import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
 import java.net.URI
+import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpRequest.BodyPublishers
@@ -22,6 +23,16 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 
+/**
+ * A configurable HTTP test runner that fires predefined requests ("Potatoes") against a target base URL.
+ *
+ * The `Cannon` supports sequential and parallel execution modes, custom headers, logging, expectations,
+ * and other reusable configuration strategies. Designed for functional testing, stress testing, or
+ * automation of REST-like APIs.
+ *
+ * @property baseUrl The root URL used to resolve all relative request paths.
+ * @property configuration A list of reusable strategies or behaviors that affect request firing.
+ */
 class Cannon {
     private val baseUrl: String
     private val configuration: List<CannonConfiguration>
@@ -37,18 +48,54 @@ class Cannon {
         this.client = HttpClient.newHttpClient()
     }
 
+    /**
+     * Returns a new `Cannon` instance with additional configuration strategies appended.
+     *
+     * This does not mutate the original `Cannon` but returns a new one with combined configuration.
+     *
+     * @param additionalConfiguration The new configuration strategies to add.
+     * @return A new `Cannon` with extended configuration.
+     */
+    fun withAmendedConfiguration(vararg additionalConfiguration: CannonConfiguration): Cannon = this.withAmendedConfiguration(additionalConfiguration.toList())
+
+    /**
+     * Returns a new `Cannon` instance with additional configuration strategies appended.
+     *
+     * This does not mutate the original `Cannon` but returns a new one with combined configuration.
+     *
+     * @param additionalConfiguration The new configuration strategies to add.
+     * @return A new `Cannon` with extended configuration.
+     */
+    fun withAmendedConfiguration(additionalConfiguration: List<CannonConfiguration>): Cannon = Cannon(baseUrl, configuration + additionalConfiguration)
+
+    /**
+     * Fires the given `Potato` requests using vararg syntax.
+     *
+     * If no `FireMode` is specified, the default is `PARALLEL`.
+     *
+     * @param potatoes The HTTP requests to fire.
+     * @return A list of `Result` objects representing the responses.
+     */
     fun fire(vararg potatoes: Potato): List<Result> {
         return fire(potatoes.toList())
     }
 
+    /**
+     * Fires a list of `Potato` requests according to the configured `FireMode`.
+     *
+     * If no `FireMode` is specified, the default is `PARALLEL`.
+     *
+     * @param potatoes The list of HTTP requests to fire.
+     * @return A list of `Result` objects representing the responses.
+     */
     fun fire(potatoes: List<Potato>): List<Result> {
         val mode = configuration
             .filterIsInstance<FireMode>()
-            .firstOrNull()?.mode ?: Mode.Sequential
+            .lastOrNull() ?: FireMode.PARALLEL
 
         return when (mode) {
-            Mode.Sequential -> potatoes.map { fireOne(it) }
-            Mode.Parallel -> fireParallel(potatoes)
+            FireMode.SEQUENTIAL -> potatoes.map { fireOne(it) }
+            FireMode.PARALLEL -> fireParallel(potatoes)
         }
     }
 
@@ -74,7 +121,16 @@ class Cannon {
         return results.toList()
     }
 
-    private fun fireOne(potato: Potato): Result {
+    /**
+     * Fires a single `Potato` request and returns the result.
+     *
+     * This method constructs the full URL, applies query parameters and headers,
+     * sends the request, and processes the response.
+     *
+     * @param potato The HTTP request to fire.
+     * @return A `Result` object containing the response details.
+     */
+    fun fireOne(potato: Potato): Result {
 
         val allQueryParams = mutableMapOf<String, List<String>>()
 
@@ -86,7 +142,9 @@ class Cannon {
 
         val queryString = if (allQueryParams.isNotEmpty()) {
             "?" + allQueryParams.entries.joinToString("&") { entry ->
-                entry.value.joinToString("&") { value -> "${entry.key}=$value" }
+                entry.value.joinToString("&") { value ->
+                    "${URLEncoder.encode(entry.key, "UTF-8")}=${URLEncoder.encode(value, "UTF-8")}"
+                }
             }
         } else {
             ""
@@ -94,7 +152,7 @@ class Cannon {
 
         val fullUrl = baseUrl + potato.path + queryString
 
-        val allHeaders = mutableMapOf<String, String>()
+        val allHeaders = mutableMapOf<String, List<String>>()
 
         configs
             .filterIsInstance<HeaderStrategy>()
@@ -103,8 +161,11 @@ class Cannon {
         val builder = HttpRequest.newBuilder()
             .uri(URI.create(fullUrl))
 
-        allHeaders.forEach { (key, value) ->
-            builder.header(key, value)
+        allHeaders.forEach { (key, values) ->
+            values.forEach { value ->
+                builder.header(key, value)
+            }
+
         }
 
         val request = when (val body = potato.body) {
@@ -121,13 +182,16 @@ class Cannon {
             .filterIsInstance<LogExclude>()
             .toSet()
 
+        val verifications = configs
+            .filterIsInstance<ResultVerification>()
+
         val start = System.currentTimeMillis()
 
-        try {
+        val result = try {
             val response = client.send(request, BodyHandlers.ofByteArray())
             val duration = System.currentTimeMillis() - start
 
-            val result = Result(
+            Result(
                 potato = potato,
                 fullUrl = fullUrl,
                 statusCode = response.statusCode(),
@@ -139,16 +203,8 @@ class Cannon {
                 error = null
             )
 
-            result.log(baseLogging, logExcludes)
-
-            configs
-                .filterIsInstance<ResultVerification>()
-                .forEach { it.verify(result) }
-
-            return result
-
         } catch (e: Exception) {
-            val result = Result(
+            Result(
                 potato = potato,
                 fullUrl = fullUrl,
                 statusCode = -1,
@@ -159,36 +215,13 @@ class Cannon {
                 queryParams = allQueryParams,
                 error = e
             )
-
-            result.log(baseLogging, logExcludes)
-
-            configs
-                .filterIsInstance<ResultVerification>()
-                .forEach { it.verify(result) }
-
-            return result
         }
+
+        result.log(baseLogging, logExcludes,verifications)
+
+        verifications
+            .forEach { it.verify(result) }
+
+        return result
     }
 }
-
-private fun ByteArray.toPotatoBody(): PotatoBody? {
-    if (isEmpty()) return null
-
-    val charset = Charsets.UTF_8
-    val text = try {
-        val decoded = String(this, charset)
-        // Heuristic: check if decoded string has mostly printable characters
-        val printableRatio = decoded.count { it.isLetterOrDigit() || it.isWhitespace() || it.isLetter() || it in ' '..'~' }.toDouble() / decoded.length
-        if (printableRatio > 0.9) {
-            TextBody(decoded)
-        } else {
-            BinaryBody(this)
-        }
-    } catch (e: Exception) {
-        BinaryBody(this)
-    }
-
-    return text
-}
-
-enum class Mode { Sequential, Parallel }
