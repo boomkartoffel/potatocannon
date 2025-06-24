@@ -12,6 +12,7 @@ import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.result.ListDeserializer
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.result.DeserializationFormat
+import io.github.boomkartoffel.potatocannon.result.Headers
 import io.github.boomkartoffel.potatocannon.result.SingleDeserializer
 import io.github.boomkartoffel.potatocannon.strategy.BearerAuth
 import io.github.boomkartoffel.potatocannon.strategy.CookieHeader
@@ -26,10 +27,11 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.*
+import kotlin.collections.first
 import kotlin.properties.Delegates
 import kotlin.random.Random
 
-data class CreateUser (
+data class CreateUser(
     val id: Int,
     val name: String,
     val email: String
@@ -103,6 +105,8 @@ class PotatoCannonTest {
     private val is404: Expectation = Expectation { result: Result ->
         Assertions.assertEquals(404, result.statusCode)
     }
+
+    private val is404Verification = ResultVerification("is 404", is404)
 
     @Test
     fun `GET request to test returns Hello`() {
@@ -254,6 +258,25 @@ class PotatoCannonTest {
 
 
         baseCannon.fire(potatoSingle, potatoList)
+
+    }
+
+    @Test
+    fun `POST request to create user returns serializable XML and can be deserialized with a different charset`() {
+        val expectSingle = Expectation { result: Result ->
+            val created = result.bodyAsSingle(CreateUser::class.java, DeserializationFormat.XML, Charsets.UTF_32)
+            created.id shouldBe 1
+            created.name shouldBe "Max Muster"
+            created.email shouldBe "max@muster.com"
+        }.withDescription("Response is correctly deserialized from single XML with a UTF32 charset")
+
+        val potatoSingle = Potato(
+            method = HttpMethod.POST,
+            path = "/create-user-xml-utf32",
+            expectSingle
+        )
+
+        baseCannon.fire(potatoSingle)
 
     }
 
@@ -419,16 +442,17 @@ class PotatoCannonTest {
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
-                ResultVerification { result ->
-                    Assertions.assertEquals("Hello", result.responseText())
-                    Assertions.assertEquals(1, result.requestHeaders["Content-Type"]?.size)
-                    Assertions.assertEquals("application/xml", result.requestHeaders["Content-Type"]?.first())
-                    Assertions.assertEquals("Bearer mytoken", result.requestHeaders["Authorization"]?.first())
-                    Assertions.assertEquals(1, result.requestHeaders["Authorization"]?.size)
+                isHelloResponseVerification,
+                ResultVerification("Only one content type is provided and that is XML") { result ->
+                    result.requestHeaders["Content-Type"]?.size shouldBe 1
+                    result.requestHeaders["Content-Type"]?.first() shouldBe "application/xml"
+                },
+                ResultVerification("Only one Auth Header type is provided and that is the Bearer token") { result ->
+                    result.requestHeaders["Authorization"]?.size shouldBe 1
+                    result.requestHeaders["Authorization"]?.first() shouldBe "Bearer mytoken"
                 }
             )
         )
-
 
         val cannon = Cannon(
             baseUrl = "http://localhost:$port",
@@ -458,32 +482,36 @@ class PotatoCannonTest {
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
-                ResultVerification { result ->
-                    Assertions.assertEquals(
-                        "Hey ya! Great to see you here. Btw, nothing is configured for this request path. Create a rule and start building a mock API.",
-                        result.responseText()
-                    )
-                    Assertions.assertEquals(1, result.requestHeaders["Content-Type"]?.size)
-                    Assertions.assertEquals("application/xml", result.requestHeaders["Content-Type"]?.first())
-                    Assertions.assertEquals("Bearer mytoken", result.requestHeaders["Authorization"]?.first())
-                    Assertions.assertEquals(1, result.requestHeaders["Authorization"]?.size)
-                }.withDescription("response is correct")
+                ResultVerification("Returns default beeceptor nothing configured yet message") { result ->
+                    result.responseText() shouldBe "Hey ya! Great to see you here. BTW, nothing is configured here. Create a mock server on Beeceptor.com"
+                },
+                ResultVerification("Only one content type is provided and that is XML") { result ->
+                    result.requestHeaders["Content-Type"]?.size shouldBe 1
+                    result.requestHeaders["Content-Type"]?.first() shouldBe "application/xml"
+                },
+                ResultVerification("Only one Auth Header type is provided and that is the Bearer token") { result ->
+                    result.requestHeaders["Authorization"]?.size shouldBe 1
+                    result.requestHeaders["Authorization"]?.first() shouldBe "Bearer mytoken"
+                }
             )
         )
 
+        val randomLetters = (1..30)
+            .map { ('a'..'z').random() }
+            .joinToString("")
+
+        val randomBeeceptorUrl = "$randomLetters.free.beeceptor.com"
 
         val cannon = Cannon(
-            baseUrl = "https://mytestxyxyxyxyy.free.beeceptor.com",
-            configuration = listOf(
-                FireMode.PARALLEL,
-                BasicAuth(
-                    username = "user",
-                    password = "password"
-                ),
-                CustomHeader("X-Custom-Header", "CustomValue"),
-                is200Verification,
-                QueryParam("queryCannon", "valueCannon")
-            )
+            baseUrl = "https://$randomBeeceptorUrl",
+            BasicAuth(
+                username = "user",
+                password = "password"
+            ),
+            CustomHeader("X-Custom-Header", "CustomValue"),
+            is404Verification,
+            QueryParam("queryCannon", "valueCannon")
+
         )
 
         cannon.fire(potato)
@@ -498,8 +526,7 @@ class PotatoCannonTest {
             QueryParam("query2", "value2 with < or ÜÖÄ> special characters"),
         )
 
-        val expect = ResultVerification("Characters are URL encoded") {
-            result ->
+        val expect = ResultVerification("Characters are URL encoded") { result ->
             result.fullUrl shouldContain "test?+++++++++++query=value+with+spaces+%26+special+characters+like+%3F+and+%3D&query2=value2+with+%3C+or+%C3%9C%C3%96%C3%84%3E+special+characters"
         }
 
@@ -548,13 +575,13 @@ class PotatoCannonTest {
             is200Verification
         )
 
-        val results = cannon.fire(firstPotato)
+        val result = cannon.fireOne(firstPotato)
 
         cannon.fire(
             firstPotato
                 .withPath("/second-call")
                 .withAmendedConfiguration(
-                    QueryParam("number", results.first().responseText() ?: "0")
+                    QueryParam("number", result.responseText() ?: "0")
                 )
         )
 

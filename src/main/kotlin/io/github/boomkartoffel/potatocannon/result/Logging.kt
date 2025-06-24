@@ -7,6 +7,7 @@ import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
+import java.nio.charset.Charset
 import kotlin.collections.component1
 import kotlin.collections.component2
 
@@ -35,10 +36,10 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verific
         }
     }
 
-    if (requestHeaders.isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }) {
+    if (requestHeaders.toMap().isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }) {
         builder.appendLine("|    Headers:")
         val mask = logExcludes.any { it == LogExclude.SECURITY_HEADERS }
-        builder.appendLine(requestHeaders.logFilteredHeaders(mask).joinToString("\n"))
+        builder.appendLine(requestHeaders.toMap().logFilteredHeaders(mask).joinToString("\n"))
     }
 
     if (potato.body != null && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
@@ -52,16 +53,22 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verific
     builder.appendLine("|    Time:    ${durationMillis}ms")
 
 
-    if (responseHeaders.isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }) {
+    if (responseHeaders.toMap().isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }) {
         builder.appendLine("|    Headers:")
         val mask = logExcludes.any { it == LogExclude.SECURITY_HEADERS }
-        builder.appendLine(responseHeaders.logFilteredHeaders(mask).joinToString("\n"))
+        builder.appendLine(responseHeaders.toMap().logFilteredHeaders(mask).joinToString("\n"))
     }
 
 
     if (responseBody != null && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
         builder.appendLine("|    Body:")
-        builder.appendLine(responseText()?.prettifyIndented())
+
+        val charset = responseHeaders["content-type"]
+            ?.firstOrNull()
+            ?.let(::extractCharset)
+            ?: Charsets.UTF_8
+
+        builder.appendLine(responseText(charset)?.prettifyIndented())
     }
 
     if (error != null) {
@@ -79,11 +86,11 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verific
         if (unnamed.isNotEmpty()) {
             val label =
                 if (unnamed.size == 1) "1 undescribed verification" else "${unnamed.size} undescribed verifications"
-            builder.appendLine("|   - $label")
+            builder.appendLine("|      - $label")
         }
 
         named.forEach {
-            builder.appendLine("|   - ${it.description}")
+            builder.appendLine("|      - ${it.description}")
         }
     }
 
@@ -146,4 +153,19 @@ private fun String.prettifyJsonIfPossible(): String? {
     } catch (e: Exception) {
         null
     }
+}
+
+private fun extractCharset(contentType: String): Charset? {
+    return contentType
+        .split(";")
+        .map { it.trim() }
+        .firstOrNull { it.startsWith("charset=", ignoreCase = true) }
+        ?.substringAfter("=")
+        ?.let {
+            try {
+                Charset.forName(it)
+            } catch (e: Exception) {
+                null
+            }
+        }
 }

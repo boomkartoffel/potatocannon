@@ -4,6 +4,7 @@ import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.potato.TextBody
+import io.github.boomkartoffel.potatocannon.result.Headers
 import io.github.boomkartoffel.potatocannon.result.log
 import io.github.boomkartoffel.potatocannon.strategy.CannonConfiguration
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
@@ -196,8 +197,8 @@ class Cannon {
                 fullUrl = fullUrl,
                 statusCode = response.statusCode(),
                 responseBody = response.body(),
-                responseHeaders = response.headers().map(),
-                requestHeaders = request.headers().map(),
+                responseHeaders = Headers(response.headers().map().mapKeys { it.key.lowercase() }),
+                requestHeaders = Headers(request.headers().map().mapKeys { it.key.lowercase() }),
                 durationMillis = duration,
                 queryParams = allQueryParams,
                 error = null
@@ -209,9 +210,9 @@ class Cannon {
                 fullUrl = fullUrl,
                 statusCode = -1,
                 responseBody = null,
-                responseHeaders = emptyMap(),
+                responseHeaders = Headers(emptyMap()),
                 durationMillis = System.currentTimeMillis() - start,
-                requestHeaders = request.headers().map(),
+                requestHeaders = Headers(request.headers().map().mapKeys { it.key.lowercase() }),
                 queryParams = allQueryParams,
                 error = e
             )

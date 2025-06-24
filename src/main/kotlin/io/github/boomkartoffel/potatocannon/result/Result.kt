@@ -6,6 +6,17 @@ import java.nio.charset.Charset
 private val defaultCharset = Charsets.UTF_8
 private val defaultSerialization = DeserializationFormat.JSON
 
+class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
+
+    private val normalized = rawHeaders.mapKeys { it.key.lowercase() }
+
+    operator fun get(key: String): List<String>? {
+        return normalized[key.lowercase()]
+    }
+
+    internal fun toMap(): Map<String, List<String>> = normalized
+}
+
 /**
  * Represents the outcome of firing a single [Potato] request.
  *
@@ -21,13 +32,13 @@ private val defaultSerialization = DeserializationFormat.JSON
  * @property durationMillis Total time in milliseconds taken to execute the request.
  * @property error Any exception thrown during the request, or null if successful.
  */
-class Result(
+class Result internal constructor(
     val potato: Potato,
     val fullUrl: String,
     val statusCode: Int,
     val responseBody: ByteArray?,
-    val requestHeaders: Map<String, List<String>>,
-    val responseHeaders: Map<String, List<String>>,
+    val requestHeaders: Headers,
+    val responseHeaders: Headers,
     val queryParams: Map<String, List<String>>,
     val durationMillis: Long,
     val error: Throwable?

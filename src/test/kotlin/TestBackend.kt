@@ -1,7 +1,9 @@
 package io.github.boomkartoffel.potatocannon
 
+import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.withCharset
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -88,6 +90,21 @@ object TestBackend {
                                 </User>
                             """.trimIndent()
                     call.respond(xml)
+                }
+
+                post("/create-user-xml-utf32") {
+                    val xml = """
+                                <User>
+                                    <id>1</id>
+                                    <name>Max Muster</name>
+                                    <email>max@muster.com</email>
+                                </User>
+                            """.trimIndent()
+
+                    call.respondText(
+                        text = xml,
+                        contentType = ContentType.Text.Xml.withCharset(Charsets.UTF_32)
+                    )
                 }
 
                 post("/create-user-xml-list") {
