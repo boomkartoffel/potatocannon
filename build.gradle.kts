@@ -8,10 +8,10 @@ version = "1.0-SNAPSHOT"
 
 val ktorVersion = "3.2.0"
 val jacksonVersion = "2.19.1"
-val kotlinxSerializationVersion = "1.6.0"
-val junitJupiterVersion = "5.10.0"
-val kotestVersion = "5.8.1"
-val slf4jVersion = "2.0.13"
+val kotlinxSerializationVersion = "1.8.1"
+val junitJupiterVersion = "5.13.1"
+val kotestVersion = "5.9.1"
+val slf4jVersion = "2.0.17"
 
 repositories {
     mavenCentral()
