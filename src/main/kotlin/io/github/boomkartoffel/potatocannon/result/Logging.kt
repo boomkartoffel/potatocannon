@@ -7,6 +7,8 @@ import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.nio.charset.Charset
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -72,9 +74,15 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verific
     }
 
     if (error != null) {
-        builder.appendLine()
+        builder.appendLine("| ")
         builder.appendLine("| ⚠️ Error:")
         builder.appendLine("|    ${error::class.simpleName}: ${error.message}")
+
+        val stackTrace = StringWriter().also { sw ->
+            error.printStackTrace(PrintWriter(sw))
+        }.toString()
+
+        builder.appendLine(stackTrace.prettifyIndented())
     }
 
     if (verification.isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.VERIFICATIONS }) {
