@@ -28,6 +28,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import kotlin.collections.first
 import kotlin.properties.Delegates
 import kotlin.random.Random
@@ -90,12 +91,9 @@ class PotatoCannonTest {
         TestBackend.stop()
     }
 
-
-    private val is200: Expectation = Expectation { result: Result ->
+    private val is200Verification = ResultVerification("Response is 200 OK") { result: Result ->
         Assertions.assertEquals(200, result.statusCode)
     }
-
-    private val is200Verification = ResultVerification("is 200", is200)
 
     private val isHelloResponse: Expectation = Expectation { result: Result ->
         Assertions.assertEquals("Hello", result.responseText())
@@ -189,6 +187,32 @@ class PotatoCannonTest {
         val cannon = Cannon(
             baseUrl = "http://localhost:$port",
         )
+
+        cannon.fire(potato)
+    }
+
+    @Test
+    fun `POST request from readme`() {
+        val cannon = Cannon(
+            baseUrl = "http://localhost:$port",
+            configuration = listOf(
+                BasicAuth("user", "pass")
+            )
+        )
+
+        val potato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            body = TextBody("{ \"message\": \"hi\" }"),
+            configuration = listOf(
+                ContentHeader.JSON,
+                ResultVerification("Status Code is 200 and return value is Hello") { result ->
+                    assertEquals(200, result.statusCode)
+                    assertEquals("Hello", result.responseText())
+                }
+            )
+        )
+
 
         cannon.fire(potato)
     }

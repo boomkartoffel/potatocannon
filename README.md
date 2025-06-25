@@ -1,6 +1,6 @@
 # 🥔 The Potato Cannon
 
-The **Potato Cannon** is a lightweight, expressive HTTP testing library for Java and Kotlin application, designed with a **Behavior-Driven Development (BDD)** mindset. 
+The **Potato Cannon** is a lightweight, expressive HTTP testing library for Java and Kotlin applications, designed with a **Behavior-Driven Development (BDD)** mindset. 
 While traditional BDD tools like Cucumber focus on high-level user stories, the Potato Cannon targets the technical behavior of APIs - status codes, headers, body content, and more.
 
 ---
@@ -41,7 +41,7 @@ This framework is built to test **what your APIs deliver**, not how they are bui
 
 ## How?
 
-Kotlin
+
 ```kotlin
 val cannon = Cannon(
     baseUrl = "http://localhost:8080",
@@ -55,39 +55,74 @@ val potato = Potato(
     path = "/test",
     body = TextBody("{ \"message\": \"hi\" }"),
     configuration = listOf(
-        ContentHeader(ContentType.JSON),
-        ResultVerification { result ->
+        ContentHeader.JSON,
+        ResultVerification("Status Code is 200 and return value is Hello") { result ->
             assertEquals(200, result.statusCode)
-            assertEquals("Hello", result.responseBody)
-        }
-    )
+            assertEquals("Hello", result.responseText())
+    }
+  )
 )
-
 
 cannon.fire(potato)
 ```
-Java
 
-```java
-Cannon cannon = new Cannon(
-        "http://localhost:8080",
-        List.of(
-                new BasicAuth("user", "pass")
-        )
-);
+### What this does
 
-Potato potato = new Potato(
-        HttpMethod.POST,
-        "/test",
-        new TextBody("{ \"message\": \"hi\" }"),
-        List.of(
-                new ContentHeader(ContentType.JSON),
-                new ResultVerification(result -> {
-                    assertEquals(200, result.getStatusCode());
-                    assertEquals("Hello", result.getResponseBodyAsString());
-                })
-        )
-);
+This example sends a real HTTP `POST` request to `/test` with a JSON body and verifies the API's behavior:
 
-cannon.fire(potato);
+- The `Cannon` defines the base URL and uses basic authentication.
+- The `Potato` describes the HTTP request: method, path, body, and expected headers.
+- The response is verified for:
+    - Status code `200`
+    - Response body equal to `"Hello"`
+
+### Why this matters
+
+- Confirms the API is reachable, accepts authenticated requests, and behaves as expected.
+- Detects breaking changes: if the endpoint path, required headers, auth, or response change, the test will fail.
+- Ensures reliable contract-level testing across refactors.
+- Makes it easy to test deployed services with minimal setup, no mocking, and full end-to-end validation.
+
+
+### How this improves your test code
+
+The Potato Cannon instance can be reused across multiple tests, allowing you to define the base URL and common strategies like authentication once. 
+Furthermore, you can reuse verifications by defining them once on a global level, which can be applied to multiple potatoes.
+
+```kotlin
+   private val is200Verification = ResultVerification("Response is 200 OK") { result: Result ->
+        assertEquals(200, result.statusCode)
+    }
 ```
+This allows you to rigidly define expectations without bloating each test with repetitive code.
+
+The output of the Potato Cannon is structured and clear, making it easy to understand what was tested and what the results were.
+
+```
+════════════════════  🥔  Potato Dispatch Log 🥔  ════════════════════
+| ⏩ Request
+|    Method:  POST
+|    Path:    /test
+|    Full URL: http://localhost:8080/test
+|    Headers:
+|      authorization: Basic dXNlcjpwYXNz
+|      content-type: application/json
+|    Body:
+|      {
+|        "message" : "hi"
+|      }
+| 
+| ⏪ Response
+|    Status:  200
+|    Time:    5ms
+|    Headers:
+|      content-length: 5
+|      content-type: text/plain; charset=UTF-8
+|    Body:
+|      Hello
+| 
+| 🔍️ Verifications (1):
+|      - Status Code is 200 and return value is Hello
+
+```
+
