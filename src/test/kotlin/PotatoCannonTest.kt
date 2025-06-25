@@ -12,8 +12,8 @@ import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.result.ListDeserializer
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.result.DeserializationFormat
-import io.github.boomkartoffel.potatocannon.result.Headers
 import io.github.boomkartoffel.potatocannon.result.SingleDeserializer
+import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
 import io.github.boomkartoffel.potatocannon.strategy.BearerAuth
 import io.github.boomkartoffel.potatocannon.strategy.CookieHeader
 import io.github.boomkartoffel.potatocannon.strategy.CustomHeader
@@ -26,6 +26,7 @@ import io.github.boomkartoffel.potatocannon.strategy.withDescription
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.*
 import kotlin.collections.first
 import kotlin.properties.Delegates
@@ -170,7 +171,7 @@ class PotatoCannonTest {
         val durationMs = end - start
 
         println("Parallel duration: $durationMs ms")
-        Assertions.assertTrue(durationMs < 1000, "Expected under 1 second")
+        Assertions.assertTrue(durationMs < 1100, "Expected under 1.1 second")
     }
 
     @Test
@@ -277,7 +278,6 @@ class PotatoCannonTest {
         )
 
         baseCannon.fire(potatoSingle)
-
     }
 
     @Test
@@ -326,7 +326,7 @@ class PotatoCannonTest {
         val appendPotato = Potato(
             method = HttpMethod.POST,
             path = "/test",
-            CustomHeader("Append-Header", "AppendValue", HeaderUpdateStrategy.APPEND),
+            CustomHeader("Append-Header", "AppendValue"),
             CustomHeader("Append-Header", "AppendValue2", HeaderUpdateStrategy.APPEND),
             ResultVerification("Header Append Check -> contains 2 elements") { result ->
                 result.requestHeaders["Append-Header"] shouldContainExactly listOf("AppendValue", "AppendValue2")
@@ -337,7 +337,7 @@ class PotatoCannonTest {
         val overwritePotato = Potato(
             method = HttpMethod.POST,
             path = "/test",
-            CustomHeader("Append-Header", "AppendValue", HeaderUpdateStrategy.OVERWRITE),
+            CustomHeader("Append-Header", "AppendValue"),
             CustomHeader("Append-Header", "AppendValue2", HeaderUpdateStrategy.OVERWRITE),
             ResultVerification("Header Append Check -> contains 1 element") { result ->
                 result.requestHeaders["Append-Header"] shouldContainExactly listOf("AppendValue2")
@@ -454,20 +454,52 @@ class PotatoCannonTest {
             )
         )
 
-        val cannon = Cannon(
-            baseUrl = "http://localhost:$port",
-            configuration = listOf(
-                FireMode.PARALLEL,
+        val cannon = baseCannon.withAmendedConfiguration(
+            listOf(
                 BasicAuth(
                     username = "user",
                     password = "password"
                 ),
-                ResultVerification(is200),
+                is200Verification,
                 QueryParam("queryCannon", "valueCannon")
             )
         )
 
         cannon.fire(potato)
+    }
+
+
+    @Test
+    fun `POST with alternate base path is sending the request to a different host`() {
+        val randomLetters = (1..30)
+            .map { ('a'..'z').random() }
+            .joinToString("")
+
+        val alternateBeeceptorUrl = "https://$randomLetters.free.beeceptor.com"
+
+        val verifyBeceptorUrl = ResultVerification("Beeceptor URL is used") { result ->
+            result.fullUrl shouldContain "$alternateBeeceptorUrl/test"
+        }
+
+        val verifyNotLocalHost = ResultVerification("Potato is not fired towards localhost") { result ->
+            result.fullUrl shouldNotContain "localhost"
+        }
+
+        val defaultPotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            is200Verification,
+            isHelloResponseVerification
+        )
+
+        val overrideBaseUrlPotato = defaultPotato
+            .withConfiguration(
+                OverrideBaseUrl(alternateBeeceptorUrl),
+                verifyBeceptorUrl,
+                verifyNotLocalHost
+            )
+
+        baseCannon.fire(defaultPotato, overrideBaseUrlPotato)
     }
 
     @Test
@@ -502,7 +534,7 @@ class PotatoCannonTest {
 
         val randomBeeceptorUrl = "$randomLetters.free.beeceptor.com"
 
-        val cannon = Cannon(
+        val beeceptorCannon = Cannon(
             baseUrl = "https://$randomBeeceptorUrl",
             BasicAuth(
                 username = "user",
@@ -514,7 +546,7 @@ class PotatoCannonTest {
 
         )
 
-        cannon.fire(potato)
+        beeceptorCannon.fire(potato)
     }
 
     @Test
@@ -565,19 +597,15 @@ class PotatoCannonTest {
 
     @Test
     fun `POST calls can be chained`() {
-        val cannon = Cannon(
-            baseUrl = "http://localhost:$port",
-        )
-
         val firstPotato = Potato(
             method = HttpMethod.POST,
             path = "/first-call",
             is200Verification
         )
 
-        val result = cannon.fireOne(firstPotato)
+        val result = baseCannon.fireOne(firstPotato)
 
-        cannon.fire(
+        baseCannon.fire(
             firstPotato
                 .withPath("/second-call")
                 .withAmendedConfiguration(

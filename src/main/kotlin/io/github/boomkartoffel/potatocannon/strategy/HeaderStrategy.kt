@@ -89,11 +89,19 @@ enum class HeaderUpdateStrategy {
 /**
  * Custom header strategy for adding or updating headers.
  *
- * Allows specifying any key-value pair as a header, with an optional strategy for how to handle existing headers with the same key.
+ * Allows specifying any key-value pair as a header, with a configurable strategy that determines how to handle cases
+ * where the same header key already exists.
+ *
+ * For example:
+ * ```
+ * CustomHeader("Append-Header", "AppendValue"),
+ * CustomHeader("Append-Header", "AppendValue2", HeaderUpdateStrategy.APPEND)
+ * ```
+ * In this case, the second header will be appended rather than overwritten due to the provided strategy.
  *
  * @property key The header key to set.
  * @property value The header value to set.
- * @property strategy The strategy to use when the header already exists. Defaults to `OVERWRITE`.
+ * @property strategy The strategy to use when the header already exists. Defaults to [HeaderUpdateStrategy.OVERWRITE].
  */
 class CustomHeader(val key: String, val value: String, val strategy: HeaderUpdateStrategy) : HeaderStrategy {
 

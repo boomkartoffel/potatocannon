@@ -24,11 +24,11 @@ enum class Logging : CannonConfiguration, PotatoConfiguration {
     BASIC,
 
     /**
-     * Enables full logging:
+     * Enables full logging (optionally filtered by [LogExclude]):
      * - All request and response metadata from [BASIC]
-     * - Headers (filtered based on exclusions)
+     * - Headers
      * - Query parameters
-     * - Request and response body (if applicable)
+     * - Request and response body
      * - All configured verifications
      */
     FULL;

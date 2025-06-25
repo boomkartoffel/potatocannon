@@ -6,6 +6,7 @@ import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.result.Headers
 import io.github.boomkartoffel.potatocannon.result.log
+import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
 import io.github.boomkartoffel.potatocannon.strategy.CannonConfiguration
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
 import io.github.boomkartoffel.potatocannon.strategy.HeaderStrategy
@@ -60,7 +61,7 @@ class Cannon {
     fun withAmendedConfiguration(vararg additionalConfiguration: CannonConfiguration): Cannon = this.withAmendedConfiguration(additionalConfiguration.toList())
 
     /**
-     * Returns a new `Cannon` instance with additional configuration strategies appended.
+     * Returns a new `Cannon` instance with additional configuration strategies appended. This means that strategies like [FireMode], which resolve to the last one trumping the previous ones, will be applied.
      *
      * This does not mutate the original `Cannon` but returns a new one with combined configuration.
      *
@@ -70,9 +71,9 @@ class Cannon {
     fun withAmendedConfiguration(additionalConfiguration: List<CannonConfiguration>): Cannon = Cannon(baseUrl, configuration + additionalConfiguration)
 
     /**
-     * Fires the given `Potato` requests using vararg syntax.
+     * Fires the givens single or multiple [Potato].
      *
-     * If no `FireMode` is specified, the default is `PARALLEL`.
+     * If no [FireMode] is specified, the default is [FireMode.PARALLEL].
      *
      * @param potatoes The HTTP requests to fire.
      * @return A list of `Result` objects representing the responses.
@@ -82,7 +83,7 @@ class Cannon {
     }
 
     /**
-     * Fires a list of `Potato` requests according to the configured `FireMode`.
+     * Fires a list of [Potato] requests according to the configured `FireMode`.
      *
      * If no `FireMode` is specified, the default is `PARALLEL`.
      *
@@ -123,13 +124,13 @@ class Cannon {
     }
 
     /**
-     * Fires a single `Potato` request and returns the result.
+     * Fires a single [Potato] request and returns the result.
      *
      * This method constructs the full URL, applies query parameters and headers,
      * sends the request, and processes the response.
      *
-     * @param potato The HTTP request to fire.
-     * @return A `Result` object containing the response details.
+     * @param potato The [Potato] to fire.
+     * @return A [Result] object containing the response details.
      */
     fun fireOne(potato: Potato): Result {
 
@@ -151,7 +152,11 @@ class Cannon {
             ""
         }
 
-        val fullUrl = baseUrl + potato.path + queryString
+        val urlToUse = potato.configuration
+            .filterIsInstance<OverrideBaseUrl>()
+            .lastOrNull()?.url ?: baseUrl
+
+        val fullUrl = urlToUse + potato.path + queryString
 
         val allHeaders = mutableMapOf<String, List<String>>()
 

@@ -49,6 +49,12 @@ class Potato(
     constructor(
         method: HttpMethod,
         path: String,
+        configuration: List<PotatoConfiguration>
+    ) : this(method, path, null, configuration)
+
+    constructor(
+        method: HttpMethod,
+        path: String,
         body: PotatoBody,
         vararg configuration: PotatoConfiguration
     ) : this(method, path, body, configuration.toList())
