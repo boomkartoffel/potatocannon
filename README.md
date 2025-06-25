@@ -126,3 +126,20 @@ The output of the Potato Cannon is structured and clear, making it easy to under
 
 ```
 
+### Project Status
+
+The Potato Cannon is currently in active development and considered **alpha**.
+
+- Expect breaking changes while we refine the API.
+- Feedback, suggestions, and contributions are very welcome!
+- If you're using it and hit a limitation or have ideas to improve it, feel free to open an issue or discussion.
+
+While we're working toward a more stable release, please note that method names, behavior, and structure may change as the project evolves.
+
+
+
+
+
+
+
+

@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "io.github.boomkartoffel"
-version = "1.0-SNAPSHOT"
+version = "0.1.0-alpha"
 
 val ktorVersion = "3.2.0"
 val jacksonVersion = "2.19.1"
