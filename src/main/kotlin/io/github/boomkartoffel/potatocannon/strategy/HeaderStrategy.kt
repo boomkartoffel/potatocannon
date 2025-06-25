@@ -19,7 +19,7 @@ sealed interface HeaderStrategy : CannonConfiguration, PotatoConfiguration {
  * When applied, sets the `Content-Type` header to the associated MIME type of the request body.
  * There can be only one `Content-Type` header per request, so this strategy will overwrite any existing `Content-Type` header.
  */
-enum class ContentHeader(val mime: String) : HeaderStrategy {
+enum class ContentType(val mime: String) : HeaderStrategy {
     JSON("application/json"),
     XML("application/xml"),
     FORM_URLENCODED("application/x-www-form-urlencoded"),

@@ -55,7 +55,7 @@ val potato = Potato(
     path = "/test",
     body = TextBody("{ \"message\": \"hi\" }"),
     configuration = listOf(
-        ContentHeader.JSON,
+        ContentType.JSON,
         ResultVerification("Status Code is 200 and return value is Hello") { result ->
             assertEquals(200, result.statusCode)
             assertEquals("Hello", result.responseText())

@@ -3,7 +3,7 @@ package io.github.boomkartoffel.potatocannon
 import io.github.boomkartoffel.potatocannon.strategy.BasicAuth
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
-import io.github.boomkartoffel.potatocannon.strategy.ContentHeader
+import io.github.boomkartoffel.potatocannon.strategy.ContentType
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
 import io.github.boomkartoffel.potatocannon.potato.HttpMethod
@@ -178,7 +178,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST,
             path = "/test",
             body = TextBody("{ }"),
-            ContentHeader.JSON,
+            ContentType.JSON,
             is200Verification,
             isHelloResponseVerification
         )
@@ -205,7 +205,7 @@ class PotatoCannonTest {
             path = "/test",
             body = TextBody("{ \"message\": \"hi\" }"),
             configuration = listOf(
-                ContentHeader.JSON,
+                ContentType.JSON,
                 ResultVerification("Status Code is 200 and return value is Hello") { result ->
                     assertEquals(200, result.statusCode)
                     assertEquals("Hello", result.responseText())
@@ -377,7 +377,7 @@ class PotatoCannonTest {
     @Test
     fun `POST requests have correct logging`() {
         val headers = listOf(
-            ContentHeader.JSON,
+            ContentType.JSON,
             QueryParam("query", "value"),
             BearerAuth("sometoken"),
             CustomHeader("X-Custom-Header", "CustomValue"),
@@ -461,8 +461,8 @@ class PotatoCannonTest {
             body = TextBody("{ }"),
             path = "/test",
             configuration = listOf(
-                ContentHeader.JSON,
-                ContentHeader.XML,
+                ContentType.JSON,
+                ContentType.XML,
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
@@ -533,8 +533,8 @@ class PotatoCannonTest {
             body = TextBody("{ }"),
             path = "/test",
             configuration = listOf(
-                ContentHeader.JSON,
-                ContentHeader.XML,
+                ContentType.JSON,
+                ContentType.XML,
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
@@ -595,7 +595,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST,
             path = "/create-user",
 
-            ContentHeader.JSON,
+            ContentType.JSON,
             is200Verification
         )
 
@@ -647,7 +647,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST,
             path = "/test",
             body = BinaryBody(binaryContent),
-            ContentHeader.OCTET_STREAM,
+            ContentType.OCTET_STREAM,
             is200Verification,
             isHelloResponseVerification
         )
