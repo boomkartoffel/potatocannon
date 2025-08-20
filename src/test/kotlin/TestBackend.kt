@@ -76,9 +76,41 @@ object TestBackend {
                     call.respond(user)
                 }
 
+                post("/create-user-empty-string") {
+                    val json = """
+                            {
+                                "user": ""
+                            }
+                            """.trimIndent()
+                    call.respond(json)
+                }
+
                 post("/create-user-list") {
                     val user = User(1, "Max Muster", "max@muster.com")
                     call.respond(listOf(user))
+                }
+
+                post("/create-user-case-different") {
+                    val json = """
+                        [
+                            {
+                                "iD": 1,
+                                "NAME": "Max Muster",
+                                "eMail": "max@muster.com"
+                            },
+                            {
+                                "Id": 1,
+                                "namE": "Max Muster",
+                                "Email": "max@muster.com"
+                            },
+                                                                                {
+                                "ID": 1,
+                                "NAME": "Max Muster",
+                                "EMAIL": "max@muster.com"
+                            }
+                        ]
+                            """.trimIndent()
+                    call.respond(json)
                 }
 
                 post("/create-user-xml") {
@@ -90,6 +122,62 @@ object TestBackend {
                                 </User>
                             """.trimIndent()
                     call.respond(xml)
+                }
+
+                post("/create-user-json-unknown-field") {
+                    val json = """
+                                {
+                                    "id": 1,
+                                    "name": "Max Muster",
+                                    "email": "max@muster.com",
+                                    "unknownField": "This field is not defined in the User class"
+                                }
+                            """.trimIndent()
+                    call.respond(json)
+                }
+
+                get("/null-check-object-partial") {
+                    val json = """
+                                {
+                                    "map": null,
+                                    "list": null
+                                }
+                            """.trimIndent()
+                    call.respond(json)
+                }
+
+                get("/null-check-object-full") {
+                    val json = """
+                                {
+                                    "map": null,
+                                    "list": null,
+                                    "string": null,
+                                    "int": null
+                                }
+                            """.trimIndent()
+                    call.respond(json)
+                }
+
+                get("/time-object") {
+                    val json = """
+                                {
+                                    "localDate": "2025-08-20",
+                                    "localTime": "10:15:30",
+                                    "localDateTime": "2025-08-20T10:15:30",
+                                    "zonedDateTime": "2025-08-20T10:15:30+02:00[Europe/Berlin]",
+                                    "offsetTime": "10:15:30+02:00",
+                                    "offsetDateTime": "2025-08-20T10:15:30+02:00",
+                                    "instant": "2025-08-20T08:15:30Z",
+                                    "year": "2025",
+                                    "yearMonth": "2025-08",
+                                    "monthDay": "--08-20",
+                                    "duration": "PT2H30M",
+                                    "period": "P1Y2M3D",
+                                    "zoneId": "Europe/Berlin",
+                                    "zoneOffset": "+02:00"
+                                }
+                            """.trimIndent()
+                    call.respond(json)
                 }
 
                 post("/create-user-xml-utf32") {

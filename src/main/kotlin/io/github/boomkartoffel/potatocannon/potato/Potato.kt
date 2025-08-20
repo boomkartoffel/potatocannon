@@ -2,6 +2,7 @@ package io.github.boomkartoffel.potatocannon.potato
 
 import io.github.boomkartoffel.potatocannon.strategy.PotatoConfiguration
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
+import io.github.boomkartoffel.potatocannon.strategy.Expectation
 
 
 sealed interface PotatoBody
@@ -65,6 +66,9 @@ class Potato(
     fun withPath(newPath: String): Potato =
         Potato(method, newPath, body, configuration)
 
+    fun addExpectation(expectation: Expectation): Potato =
+        this.addConfiguration(expectation)
+
     fun withBody(newBody: PotatoBody?): Potato =
         Potato(method, path, newBody, configuration)
 
@@ -73,10 +77,10 @@ class Potato(
 
     fun withConfiguration(vararg newConfiguration: PotatoConfiguration): Potato = this.withConfiguration(newConfiguration.toList())
 
-    fun withAmendedConfiguration(vararg amendedConfiguration: PotatoConfiguration): Potato =
-        this.withConfiguration(configuration + amendedConfiguration)
+    fun addConfiguration(vararg addedConfiguration: PotatoConfiguration): Potato =
+        this.withConfiguration(configuration + addedConfiguration)
 
-    fun withAmendedConfiguration(amendedConfiguration: List<PotatoConfiguration>): Potato =
-        this.withConfiguration(configuration + amendedConfiguration)
+    fun addConfiguration(addedConfiguration: List<PotatoConfiguration>): Potato =
+        this.withConfiguration(configuration + addedConfiguration)
 
 }

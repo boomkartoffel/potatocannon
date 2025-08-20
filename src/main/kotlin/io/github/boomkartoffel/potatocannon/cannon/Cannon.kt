@@ -1,5 +1,7 @@
 package io.github.boomkartoffel.potatocannon.cannon
 
+import io.github.boomkartoffel.potatocannon.exception.ExecutionFailureException
+import io.github.boomkartoffel.potatocannon.exception.PotatoCannonException
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
@@ -8,12 +10,14 @@ import io.github.boomkartoffel.potatocannon.result.Headers
 import io.github.boomkartoffel.potatocannon.result.log
 import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
 import io.github.boomkartoffel.potatocannon.strategy.CannonConfiguration
+import io.github.boomkartoffel.potatocannon.strategy.Check
+import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
 import io.github.boomkartoffel.potatocannon.strategy.HeaderStrategy
 import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
-import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
+import io.github.boomkartoffel.potatocannon.strategy.Expectation
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
@@ -21,6 +25,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
 import java.util.Collections
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -50,6 +55,10 @@ class Cannon {
         this.client = HttpClient.newHttpClient()
     }
 
+    fun withFireMode(mode: FireMode): Cannon {
+        return withAmendedConfiguration(mode)
+    }
+
     /**
      * Returns a new `Cannon` instance with additional configuration strategies appended.
      *
@@ -58,7 +67,8 @@ class Cannon {
      * @param additionalConfiguration The new configuration strategies to add.
      * @return A new `Cannon` with extended configuration.
      */
-    fun withAmendedConfiguration(vararg additionalConfiguration: CannonConfiguration): Cannon = this.withAmendedConfiguration(additionalConfiguration.toList())
+    fun withAmendedConfiguration(vararg additionalConfiguration: CannonConfiguration): Cannon =
+        this.withAmendedConfiguration(additionalConfiguration.toList())
 
     /**
      * Returns a new `Cannon` instance with additional configuration strategies appended. This means that strategies like [FireMode], which resolve to the last one trumping the previous ones, will be applied.
@@ -68,7 +78,8 @@ class Cannon {
      * @param additionalConfiguration The new configuration strategies to add.
      * @return A new `Cannon` with extended configuration.
      */
-    fun withAmendedConfiguration(additionalConfiguration: List<CannonConfiguration>): Cannon = Cannon(baseUrl, configuration + additionalConfiguration)
+    fun withAmendedConfiguration(additionalConfiguration: List<CannonConfiguration>): Cannon =
+        Cannon(baseUrl, configuration + additionalConfiguration)
 
     /**
      * Fires the givens single or multiple [Potato].
@@ -109,12 +120,22 @@ class Cannon {
             val futures = potatoes.map { potato ->
                 pool.submit<Result> {
                     val result = fireOne(potato)
-                    results.add(result)
+                    results.add(result) // ensure 'results' is thread-safe!
                     result
                 }
             }
 
-            futures.forEach { it.get() } // Ensure all tasks are completed
+            for (f in futures) {
+                try {
+                    f.get() // wait; will throw ExecutionException on failure inside task
+                } catch (ee: ExecutionException) {
+                    val cause = ee.cause
+                    when (cause) {
+                        is PotatoCannonException -> throw cause
+                        else -> throw ExecutionFailureException(cause)
+                    }
+                }
+            }
         } finally {
             pool.shutdown()
             pool.awaitTermination(1, TimeUnit.MINUTES)
@@ -188,10 +209,15 @@ class Cannon {
             .filterIsInstance<LogExclude>()
             .toSet()
 
-        val verifications = configs
-            .filterIsInstance<ResultVerification>()
+        val expectations = configs
+            .filterIsInstance<Expectation>() + configs
+            .filterIsInstance<Check>()
+            .map { Expectation(it) }
 
         val start = System.currentTimeMillis()
+
+        val deserializationStrategies = configs
+            .filterIsInstance<DeserializationStrategy>()
 
         val result = try {
             val response = client.send(request, BodyHandlers.ofByteArray())
@@ -206,6 +232,7 @@ class Cannon {
                 requestHeaders = Headers(request.headers().map().mapKeys { it.key.lowercase() }),
                 durationMillis = duration,
                 queryParams = allQueryParams,
+                deserializationStrategies = deserializationStrategies,
                 error = null
             )
 
@@ -219,14 +246,38 @@ class Cannon {
                 durationMillis = System.currentTimeMillis() - start,
                 requestHeaders = Headers(request.headers().map().mapKeys { it.key.lowercase() }),
                 queryParams = allQueryParams,
+                deserializationStrategies = deserializationStrategies,
                 error = e
             )
         }
 
-        result.log(baseLogging, logExcludes,verifications)
 
-        verifications
-            .forEach { it.verify(result) }
+        val expectationResults = expectations
+            .map { it.verify(result) }
+
+        result.log(baseLogging, logExcludes, expectationResults)
+
+        val failures = expectationResults.filter { it.error != null }
+        if (failures.isNotEmpty()) {
+            // Optional: add a single-line summary to your *log* builder here if you want:
+            // builder.appendLine("|      ✘ ${failures.size} verification(s) failed")
+
+            // Build *only* the detailed items. Do NOT repeat the "N verifications failed:" header
+            val details = failures.joinToString("\n\n") { vr ->
+                val desc = vr.expectation.description.ifBlank { "unnamed verification" }
+                val msg = vr.error?.message?.trim().orEmpty()
+                buildString {
+                    appendLine("$desc:")
+                    if (msg.isNotEmpty()) appendLine(msg)
+                }.trimEnd()
+            }
+
+//            println(details)
+
+            // Throw with detailed items only; the runner will prefix with "AssertionError: ..."
+            failures.forEach { throw it.error!! }
+        }
+
 
         return result
     }

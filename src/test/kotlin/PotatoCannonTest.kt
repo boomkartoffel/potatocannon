@@ -2,45 +2,92 @@ package io.github.boomkartoffel.potatocannon
 
 import io.github.boomkartoffel.potatocannon.strategy.BasicAuth
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
+import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.strategy.ContentType
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
-import io.github.boomkartoffel.potatocannon.strategy.Expectation
+import io.github.boomkartoffel.potatocannon.strategy.Check
 import io.github.boomkartoffel.potatocannon.potato.HttpMethod
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.potato.TextBody
-import io.github.boomkartoffel.potatocannon.result.ListDeserializer
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.result.DeserializationFormat
-import io.github.boomkartoffel.potatocannon.result.SingleDeserializer
+import io.github.boomkartoffel.potatocannon.result.Deserializer
+import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObject
 import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
 import io.github.boomkartoffel.potatocannon.strategy.BearerAuth
+import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
 import io.github.boomkartoffel.potatocannon.strategy.CookieHeader
 import io.github.boomkartoffel.potatocannon.strategy.CustomHeader
 import io.github.boomkartoffel.potatocannon.strategy.HeaderUpdateStrategy
 import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
-import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
+import io.github.boomkartoffel.potatocannon.strategy.Expectation
+import io.github.boomkartoffel.potatocannon.strategy.JavaTimeSupport
+import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
+import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode
 import io.github.boomkartoffel.potatocannon.strategy.withDescription
+import io.kotest.assertions.throwables.shouldNotThrow
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import java.time.Duration
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.MonthDay
+import java.time.OffsetDateTime
+import java.time.OffsetTime
+import java.time.Period
+import java.time.Year
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import kotlin.collections.first
 import kotlin.properties.Delegates
 import kotlin.random.Random
 
 data class CreateUser(
-    val id: Int,
-    val name: String,
-    val email: String
+    val id: Int, val name: String, val email: String
 )
 
-object CommaSeparatedSingleDeserializer : SingleDeserializer {
-    override fun <T> deserializeSingle(data: String, targetClass: Class<T>): T {
+data class EmptyStringToNullCheckObject(
+    val user: CreateUser?
+)
+
+data class NullCheckObject(
+    val map: Map<String, String>,
+    val list: List<String>,
+    val string: String = "",
+    val int: Int = 0
+)
+
+data class JavaTimeCheckObject(
+    val localDate: LocalDate,
+    val localTime: LocalTime,
+    val localDateTime: LocalDateTime,
+    val offsetTime: OffsetTime,
+    val offsetDateTime: OffsetDateTime,
+    val zonedDateTime: ZonedDateTime,
+    val instant: java.time.Instant,
+    val year: Year,
+    val yearMonth: YearMonth,
+    val monthDay: MonthDay,
+    val duration: Duration,
+    val period: Period,
+    val zoneId: ZoneId,
+    val zoneOffset: ZoneOffset
+)
+
+object CommaSeparatedDeserializer : Deserializer {
+    override fun <T> deserializeObject(data: String, targetClass: Class<T>): T {
         require(targetClass == CreateUser::class.java) {
             "Unsupported class for CommaSeparatedSingleDeserializer: $targetClass"
         }
@@ -49,24 +96,18 @@ object CommaSeparatedSingleDeserializer : SingleDeserializer {
         if (parts.size != 3) error("Expected 3 fields for CreateUser")
 
         return CreateUser(
-            id = parts[0].trim().toInt(),
-            name = parts[1].trim(),
-            email = parts[2].trim()
+            id = parts[0].trim().toInt(), name = parts[1].trim(), email = parts[2].trim()
         ) as T
     }
-}
 
-object CommaSeparatedListDeserializer : ListDeserializer {
     override fun <T> deserializeList(data: String, targetClass: Class<T>): List<T> {
         require(targetClass == CreateUser::class.java) {
             "Unsupported class for CommaSeparatedListDeserializer: $targetClass"
         }
 
-        return data.trim().split(";")
-            .filter { it.isNotBlank() }
-            .map { line ->
-                CommaSeparatedSingleDeserializer.deserializeSingle(line, CreateUser::class.java) as T
-            }
+        return data.trim().split(";").filter { it.isNotBlank() }.map { line ->
+            deserializeObject(line, CreateUser::class.java) as T
+        }
     }
 }
 
@@ -84,6 +125,11 @@ class PotatoCannonTest {
         baseCannon = Cannon(
             baseUrl = "http://localhost:$port",
         )
+
+        val warmUpPotato = Potato(
+            method = HttpMethod.GET, path = "/test", is200Expectation, isHelloResponseExpectation
+        )
+        baseCannon.fire(warmUpPotato)
     }
 
     @AfterAll
@@ -91,39 +137,28 @@ class PotatoCannonTest {
         TestBackend.stop()
     }
 
-    private val is200Verification = ResultVerification("Response is 200 OK") { result: Result ->
-        Assertions.assertEquals(200, result.statusCode)
+    private val is200Expectation = Expectation("Response is 200 OK") { result ->
+        result.statusCode shouldBe 200
     }
 
-    private val isHelloResponse: Expectation = Expectation { result: Result ->
-        Assertions.assertEquals("Hello", result.responseText())
-    }
+    private val isHelloResponseExpectation = Check { result ->
+        result.responseText() shouldBe "Hello"
+    }.withDescription("Response is Hello")
 
-    private val isHelloResponseVerification = isHelloResponse.withDescription("response is Hello")
 
-    private val is404: Expectation = Expectation { result: Result ->
-        Assertions.assertEquals(404, result.statusCode)
-    }
-
-    private val is404Verification = ResultVerification("is 404", is404)
+    private val is404Expectation = Check { result: Result ->
+        result.statusCode shouldBe 404
+    }.withDescription("Response is 404 Not Found")
 
     @Test
     fun `GET request to test returns Hello`() {
 
-        val expect = Expectation { result: Result ->
-            Assertions.assertEquals(result.statusCode, 200)
-            Assertions.assertEquals("Hello", result.responseText())
-        }
-
         val potato = Potato(
-            method = HttpMethod.GET,
-            path = "/test",
-            expect.withDescription("is 200 and response is Hello")
+            method = HttpMethod.GET, path = "/test", isHelloResponseExpectation, is200Expectation
         )
 
 
-        val cannon = baseCannon
-            .withAmendedConfiguration(FireMode.SEQUENTIAL)
+        val cannon = baseCannon.withFireMode(FireMode.SEQUENTIAL)
 
         cannon.fire(potato)
     }
@@ -133,17 +168,14 @@ class PotatoCannonTest {
         val potatoes = (1..10).map {
             Potato(
                 method = HttpMethod.GET,
-                path = "/test-wait",
-                is200Verification,
-                isHelloResponseVerification
-
+                path = "/test-wait"
             )
+                .addExpectation(is200Expectation)
+                .addExpectation(isHelloResponseExpectation)
         }
 
         val start = System.currentTimeMillis()
-        baseCannon
-            .withAmendedConfiguration(FireMode.SEQUENTIAL)
-            .fire(potatoes)
+        baseCannon.withAmendedConfiguration(FireMode.SEQUENTIAL).fire(potatoes)
         val end = System.currentTimeMillis()
         val durationMs = end - start
 
@@ -152,13 +184,10 @@ class PotatoCannonTest {
     }
 
     @Test
-    fun `GET request times 500 to test-wait takes less than 1 second in parallel mode`() {
+    fun `GET request times 500 to test-wait takes less than 1100 ms in parallel mode`() {
         val potatoes = (1..500).map {
             Potato(
-                method = HttpMethod.GET,
-                path = "/test-wait-parallel",
-                is200Verification,
-                isHelloResponseVerification
+                method = HttpMethod.GET, path = "/test-wait-parallel", is200Expectation, isHelloResponseExpectation
             )
         }
 
@@ -169,7 +198,7 @@ class PotatoCannonTest {
         val durationMs = end - start
 
         println("Parallel duration: $durationMs ms")
-        Assertions.assertTrue(durationMs < 1100, "Expected under 1.1 second")
+        durationMs shouldBeLessThan 1100
     }
 
     @Test
@@ -179,8 +208,8 @@ class PotatoCannonTest {
             path = "/test",
             body = TextBody("{ }"),
             ContentType.JSON,
-            is200Verification,
-            isHelloResponseVerification
+            is200Expectation,
+            isHelloResponseExpectation
         )
 
 
@@ -194,8 +223,7 @@ class PotatoCannonTest {
     @Test
     fun `POST request from readme`() {
         val cannon = Cannon(
-            baseUrl = "http://localhost:$port",
-            configuration = listOf(
+            baseUrl = "http://localhost:$port", configuration = listOf(
                 BasicAuth("user", "pass")
             )
         )
@@ -205,12 +233,10 @@ class PotatoCannonTest {
             path = "/test",
             body = TextBody("{ \"message\": \"hi\" }"),
             configuration = listOf(
-                ContentType.JSON,
-                ResultVerification("Status Code is 200 and return value is Hello") { result ->
+                ContentType.JSON, Expectation("Status Code is 200 and return value is Hello") { result ->
                     assertEquals(200, result.statusCode)
                     assertEquals("Hello", result.responseText())
-                }
-            )
+                })
         )
 
 
@@ -219,14 +245,14 @@ class PotatoCannonTest {
 
     @Test
     fun `POST request to create user returns serializable JSON`() {
-        val expect = Expectation { result: Result ->
-            val created = result.bodyAsSingle(CreateUser::class.java)
+        val expect = Check { result: Result ->
+            val created = result.bodyAsObject(CreateUser::class.java)
             created.id shouldBe 1
             created.name shouldBe "Max Muster"
             created.email shouldBe "max@muster.com"
         }.withDescription("Response is correctly deserialized from single JSON object")
 
-        val expectList = Expectation { result: Result ->
+        val expectList = Check { result: Result ->
             val createdList = result.bodyAsList(CreateUser::class.java)
             createdList.size shouldBe 1
 
@@ -238,28 +264,24 @@ class PotatoCannonTest {
         }.withDescription("Response is correctly deserialized from JSON List")
 
         val potatoSingleObject = Potato(
-            method = HttpMethod.POST,
-            path = "/create-user",
-            expect
+            method = HttpMethod.POST, path = "/create-user", expect
         )
 
-        val potatoList = potatoSingleObject
-            .withPath("/create-user-list")
-            .withConfiguration(expectList)
+        val potatoList = potatoSingleObject.withPath("/create-user-list").withConfiguration(expectList)
 
         baseCannon.fire(potatoSingleObject, potatoList)
     }
 
     @Test
     fun `POST request to create user returns serializable XML`() {
-        val expectSingle = Expectation { result: Result ->
-            val created = result.bodyAsSingle(CreateUser::class.java, DeserializationFormat.XML)
+        val expectSingle = Check { result: Result ->
+            val created = result.bodyAsObject(CreateUser::class.java, DeserializationFormat.XML)
             created.id shouldBe 1
             created.name shouldBe "Max Muster"
             created.email shouldBe "max@muster.com"
         }.withDescription("Response is correctly deserialized from single XML")
 
-        val expectList = Expectation { result: Result ->
+        val expectList = Check { result: Result ->
             val createdList = result.bodyAsList(CreateUser::class.java, DeserializationFormat.XML)
 
             createdList.size shouldBe 1
@@ -272,14 +294,10 @@ class PotatoCannonTest {
         }.withDescription("Response is correctly deserialized from XML as List")
 
         val potatoSingle = Potato(
-            method = HttpMethod.POST,
-            path = "/create-user-xml",
-            expectSingle
+            method = HttpMethod.POST, path = "/create-user-xml", expectSingle
         )
 
-        val potatoList = potatoSingle
-            .withPath("/create-user-xml-list")
-            .withConfiguration(expectList)
+        val potatoList = potatoSingle.withPath("/create-user-xml-list").withConfiguration(expectList)
 
 
         baseCannon.fire(potatoSingle, potatoList)
@@ -287,18 +305,190 @@ class PotatoCannonTest {
     }
 
     @Test
+    fun `POST request to create user that returns a json with an unknown field fails on fail mode and works on ignore mode`() {
+        val check = Check { result: Result ->
+            result.bodyAsObject(CreateUser::class.java)
+        }
+
+        val failMapping = UnknownPropertyMode.FAIL
+        val ignoreMapping = UnknownPropertyMode.IGNORE
+
+        val potato = Potato(
+            method = HttpMethod.POST, path = "/create-user-json-unknown-field",
+            check
+        )
+
+
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                potato
+                    .addConfiguration(failMapping)
+            )
+        }
+
+        shouldNotThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                //default is ignore
+                potato,
+                potato
+                    .addConfiguration(ignoreMapping)
+            )
+        }
+
+    }
+
+    @Test
+    fun `GET request for NullCheckObject fails on strict mode and works on relax mode`() {
+        val check = Check { result: Result ->
+            result.bodyAsObject(NullCheckObject::class.java)
+        }
+
+        val strictNullCheck = NullCoercion.STRICT
+        val relaxNullCheck = NullCoercion.RELAX
+
+        val partialObjectPotato = Potato(
+            method = HttpMethod.GET, path = "/null-check-object-partial",
+            check
+        )
+        val fullObjectPotato = partialObjectPotato
+            .withPath("/null-check-object-full")
+
+
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                //default is strict
+                partialObjectPotato,
+                partialObjectPotato
+                    .addConfiguration(strictNullCheck),
+                //default is strict
+                fullObjectPotato,
+                fullObjectPotato
+                    .addConfiguration(strictNullCheck)
+            )
+        }
+
+        shouldNotThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                partialObjectPotato
+                    .addConfiguration(relaxNullCheck),
+                fullObjectPotato
+                    .addConfiguration(relaxNullCheck)
+            )
+        }
+
+    }
+
+    @Test
+    fun `GET request for JavaTimeCheckObject fails on not activating java time and works on allowing it`() {
+        val check = Check { result: Result ->
+            result.bodyAsObject(JavaTimeCheckObject::class.java)
+        }
+
+        val potato = Potato(
+            method = HttpMethod.GET,
+            path = "/time-object",
+            check
+        )
+
+
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                //default is disabled
+                potato,
+            )
+        }
+
+        shouldNotThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                potato
+                    .addConfiguration(JavaTimeSupport),
+            )
+        }
+
+    }
+
+    @Test
+    fun `deserialization respects CaseInsensitiveProperties (fails by default, succeeds when enabled)`() {
+        val check = Check { result: Result ->
+            result.bodyAsList(CreateUser::class.java)
+        }
+
+        val potato = Potato(
+            method = HttpMethod.POST,
+            path = "/create-user-case-different",
+            check
+        )
+
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                //default is disabled
+                potato
+            )
+        }
+
+        shouldNotThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                potato
+                    .addConfiguration(CaseInsensitiveProperties)
+            )
+        }
+    }
+
+    @Test
+    fun `deserialization respects AcceptEmptyStringAsNullObject (fails by default, succeeds when enabled)`() {
+        val check = Check { result: Result ->
+            val emptyUser = result.bodyAsObject(EmptyStringToNullCheckObject::class.java)
+            emptyUser.user shouldBe null
+        }
+
+        val potato = Potato(
+            method = HttpMethod.POST,
+            path = "/create-user-empty-string",
+            check
+        )
+
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                //default is disabled
+                potato
+            )
+        }
+
+        shouldNotThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                potato
+                    .addConfiguration(AcceptEmptyStringAsNullObject)
+            )
+        }
+    }
+
+    @Test
     fun `POST request to create user returns serializable XML and can be deserialized with a different charset`() {
-        val expectSingle = Expectation { result: Result ->
-            val created = result.bodyAsSingle(CreateUser::class.java, DeserializationFormat.XML, Charsets.UTF_32)
+        val expectSingle = Check { result: Result ->
+            val created = result.bodyAsObject(CreateUser::class.java, DeserializationFormat.XML, Charsets.UTF_32)
             created.id shouldBe 1
             created.name shouldBe "Max Muster"
             created.email shouldBe "max@muster.com"
         }.withDescription("Response is correctly deserialized from single XML with a UTF32 charset")
 
         val potatoSingle = Potato(
-            method = HttpMethod.POST,
-            path = "/create-user-xml-utf32",
-            expectSingle
+            method = HttpMethod.POST, path = "/create-user-xml-utf32", expectSingle
+        )
+
+        baseCannon.fire(potatoSingle)
+    }
+
+    @Test
+    fun `POST request to create user returns serializable XML and can be deserialized with a different charset automatically`() {
+        val expectSingle = Check { result: Result ->
+            val created = result.bodyAsObject(CreateUser::class.java, DeserializationFormat.XML)
+            created.id shouldBe 1
+            created.name shouldBe "Max Muster"
+            created.email shouldBe "max@muster.com"
+        }.withDescription("Response is correctly deserialized from single XML and the Charset UTF-32 is automatically detected and applied")
+
+        val potatoSingle = Potato(
+            method = HttpMethod.POST, path = "/create-user-xml-utf32", expectSingle
         )
 
         baseCannon.fire(potatoSingle)
@@ -306,15 +496,15 @@ class PotatoCannonTest {
 
     @Test
     fun `POST request to create user with custom formatting can be serialized with custom mapper`() {
-        val expectSingle = Expectation { result: Result ->
-            val created = result.bodyAsSingle(CreateUser::class.java, CommaSeparatedSingleDeserializer)
+        val expectSingle = Check { result: Result ->
+            val created = result.bodyAsObject(CreateUser::class.java, CommaSeparatedDeserializer)
             created.id shouldBe 1
             created.name shouldBe "Max Muster"
             created.email shouldBe "max@muster.com"
         }.withDescription("Response is correctly deserialized from single csv line")
 
-        val expectList = Expectation { result: Result ->
-            val createdList = result.bodyAsList(CreateUser::class.java, CommaSeparatedListDeserializer)
+        val expectList = Check { result: Result ->
+            val createdList = result.bodyAsList(CreateUser::class.java, CommaSeparatedDeserializer)
 
             createdList.size shouldBe 1
 
@@ -326,14 +516,10 @@ class PotatoCannonTest {
         }.withDescription("Response is correctly deserialized from csv as List")
 
         val potatoSingle = Potato(
-            method = HttpMethod.POST,
-            path = "/create-user-custom",
-            expectSingle
+            method = HttpMethod.POST, path = "/create-user-custom", expectSingle
         )
 
-        val potatoList = potatoSingle
-            .withPath("/create-user-custom-list")
-            .withConfiguration(expectList)
+        val potatoList = potatoSingle.withPath("/create-user-custom-list").withConfiguration(expectList)
 
 
         baseCannon.fire(potatoSingle, potatoList)
@@ -342,34 +528,34 @@ class PotatoCannonTest {
 
     @Test
     fun `POST requests with Header Strategy is working correctly`() {
-        val cannon = Cannon(
-            baseUrl = "http://localhost:$port",
-            FireMode.PARALLEL
-        )
+        val cannon = baseCannon.withFireMode(FireMode.PARALLEL)
 
         val appendPotato = Potato(
             method = HttpMethod.POST,
             path = "/test",
             CustomHeader("Append-Header", "AppendValue"),
             CustomHeader("Append-Header", "AppendValue2", HeaderUpdateStrategy.APPEND),
-            ResultVerification("Header Append Check -> contains 2 elements") { result ->
+            Expectation("Header Append Check -> List elements are correct") { result ->
                 result.requestHeaders["Append-Header"] shouldContainExactly listOf("AppendValue", "AppendValue2")
+            },
+            Expectation("Header Append Check -> contains 2 elements") { result ->
                 result.requestHeaders["Append-Header"]?.size shouldBe 2
-            }
-        )
+            })
+
+        val newPot = appendPotato
+            .addExpectation(is200Expectation)
 
         val overwritePotato = Potato(
             method = HttpMethod.POST,
             path = "/test",
             CustomHeader("Append-Header", "AppendValue"),
             CustomHeader("Append-Header", "AppendValue2", HeaderUpdateStrategy.OVERWRITE),
-            ResultVerification("Header Append Check -> contains 1 element") { result ->
+            Expectation("Header Append Check -> contains 1 element") { result ->
                 result.requestHeaders["Append-Header"] shouldContainExactly listOf("AppendValue2")
                 result.requestHeaders["Append-Header"]?.size shouldBe 1
-            }
-        )
+            })
 
-        cannon.fire(appendPotato, overwritePotato)
+        cannon.fire(newPot, overwritePotato)
 
     }
 
@@ -390,17 +576,16 @@ class PotatoCannonTest {
             body = TextBody("{ }"),
         )
 
-        val baseLoggingPotatoes = Logging.entries
-            .map { logging ->
-                basePotato.withConfiguration(
-                    headers + logging + ResultVerification(
-                        {
-                            println("⬆\uFE0F This was logging: $logging")
-                        }
-                    ))
-            }
+        val baseLoggingPotatoes = Logging.entries.map { logging ->
+            basePotato.withConfiguration(
+                headers + logging + Expectation(
+                    "This is logging: $logging", {
 
-        val logExcludeCombinations = buildSet<Set<LogExclude>> {
+                    })
+            )
+        }
+
+        val logExcludeCombinations = buildSet {
             val H = LogExclude.HEADERS
             val B = LogExclude.BODY
             val Q = LogExclude.QUERY_PARAMS
@@ -438,9 +623,9 @@ class PotatoCannonTest {
 
         val baseLoggingPotatoesWithExcludes = logExcludeCombinations.map { logExcludes ->
             basePotato.withConfiguration(
-                headers + Logging.FULL + logExcludes + ResultVerification(
-                    {
-                        println("⬆\uFE0F This was FULL logging with excludes: $logExcludes")
+                headers + Logging.FULL + logExcludes + Expectation(
+                    "This is FULL logging with excludes: $logExcludes", {
+                        println("↓\uFE0F This is FULL logging with excludes: $logExcludes")
                     })
             )
         }
@@ -457,35 +642,28 @@ class PotatoCannonTest {
     @Test
     fun `POST with multiple headers will have later ones overwrite earlier`() {
         val potato = Potato(
-            method = HttpMethod.POST,
-            body = TextBody("{ }"),
-            path = "/test",
-            configuration = listOf(
+            method = HttpMethod.POST, body = TextBody("{ }"), path = "/test", configuration = listOf(
                 ContentType.JSON,
                 ContentType.XML,
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
-                isHelloResponseVerification,
-                ResultVerification("Only one content type is provided and that is XML") { result ->
+                isHelloResponseExpectation,
+                Expectation("Only one content type is provided and that is XML") { result ->
                     result.requestHeaders["Content-Type"]?.size shouldBe 1
                     result.requestHeaders["Content-Type"]?.first() shouldBe "application/xml"
                 },
-                ResultVerification("Only one Auth Header type is provided and that is the Bearer token") { result ->
+                Expectation("Only one Auth Header type is provided and that is the Bearer token") { result ->
                     result.requestHeaders["Authorization"]?.size shouldBe 1
                     result.requestHeaders["Authorization"]?.first() shouldBe "Bearer mytoken"
-                }
-            )
+                })
         )
 
         val cannon = baseCannon.withAmendedConfiguration(
             listOf(
                 BasicAuth(
-                    username = "user",
-                    password = "password"
-                ),
-                is200Verification,
-                QueryParam("queryCannon", "valueCannon")
+                    username = "user", password = "password"
+                ), is200Expectation, QueryParam("queryCannon", "valueCannon")
             )
         )
 
@@ -495,33 +673,25 @@ class PotatoCannonTest {
 
     @Test
     fun `POST with alternate base path is sending the request to a different host`() {
-        val randomLetters = (1..30)
-            .map { ('a'..'z').random() }
-            .joinToString("")
+        val randomLetters = (1..30).map { ('a'..'z').random() }.joinToString("")
 
         val alternateBeeceptorUrl = "https://$randomLetters.free.beeceptor.com"
 
-        val verifyBeceptorUrl = ResultVerification("Beeceptor URL is used") { result ->
+        val verifyBeceptorUrl = Expectation("Beeceptor URL is used") { result ->
             result.fullUrl shouldContain "$alternateBeeceptorUrl/test"
         }
 
-        val verifyNotLocalHost = ResultVerification("Potato is not fired towards localhost") { result ->
+        val verifyNotLocalHost = Expectation("Potato is not fired towards localhost") { result ->
             result.fullUrl shouldNotContain "localhost"
         }
 
         val defaultPotato = Potato(
-            method = HttpMethod.POST,
-            path = "/test",
-            is200Verification,
-            isHelloResponseVerification
+            method = HttpMethod.POST, path = "/test", is200Expectation, isHelloResponseExpectation
         )
 
-        val overrideBaseUrlPotato = defaultPotato
-            .withConfiguration(
-                OverrideBaseUrl(alternateBeeceptorUrl),
-                verifyBeceptorUrl,
-                verifyNotLocalHost
-            )
+        val overrideBaseUrlPotato = defaultPotato.withConfiguration(
+            OverrideBaseUrl(alternateBeeceptorUrl), verifyBeceptorUrl, verifyNotLocalHost
+        )
 
         baseCannon.fire(defaultPotato, overrideBaseUrlPotato)
     }
@@ -529,43 +699,36 @@ class PotatoCannonTest {
     @Test
     fun `POST with multiple headers to mockserver will have later ones overwrite earlier`() {
         val potato = Potato(
-            method = HttpMethod.POST,
-            body = TextBody("{ }"),
-            path = "/test",
-            configuration = listOf(
+            method = HttpMethod.POST, body = TextBody("{ }"), path = "/test", configuration = listOf(
                 ContentType.JSON,
                 ContentType.XML,
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
-                ResultVerification("Returns default beeceptor nothing configured yet message") { result ->
+                Expectation("Returns default beeceptor nothing configured yet message") { result ->
                     result.responseText() shouldBe "Hey ya! Great to see you here. BTW, nothing is configured here. Create a mock server on Beeceptor.com"
                 },
-                ResultVerification("Only one content type is provided and that is XML") { result ->
+                Expectation("Only one content type is provided and that is XML") { result ->
                     result.requestHeaders["Content-Type"]?.size shouldBe 1
                     result.requestHeaders["Content-Type"]?.first() shouldBe "application/xml"
                 },
-                ResultVerification("Only one Auth Header type is provided and that is the Bearer token") { result ->
+                Expectation("Only one Auth Header type is provided and that is the Bearer token") { result ->
                     result.requestHeaders["Authorization"]?.size shouldBe 1
                     result.requestHeaders["Authorization"]?.first() shouldBe "Bearer mytoken"
-                }
-            )
+                })
         )
 
-        val randomLetters = (1..30)
-            .map { ('a'..'z').random() }
-            .joinToString("")
+        val randomLetters = (1..30).map { ('a'..'z').random() }.joinToString("")
 
         val randomBeeceptorUrl = "$randomLetters.free.beeceptor.com"
 
         val beeceptorCannon = Cannon(
             baseUrl = "https://$randomBeeceptorUrl",
             BasicAuth(
-                username = "user",
-                password = "password"
+                username = "user", password = "password"
             ),
             CustomHeader("X-Custom-Header", "CustomValue"),
-            is404Verification,
+            is404Expectation,
             QueryParam("queryCannon", "valueCannon")
 
         )
@@ -582,21 +745,19 @@ class PotatoCannonTest {
             QueryParam("query2", "value2 with < or ÜÖÄ> special characters"),
         )
 
-        val expect = ResultVerification("Characters are URL encoded") { result ->
+        val expect = Expectation("Characters are URL encoded") { result ->
             result.fullUrl shouldContain "test?+++++++++++query=value+with+spaces+%26+special+characters+like+%3F+and+%3D&query2=value2+with+%3C+or+%C3%9C%C3%96%C3%84%3E+special+characters"
         }
 
-        baseCannon.fire(potato.withAmendedConfiguration(expect))
+        baseCannon.fire(potato.addConfiguration(expect))
     }
 
     @Test
     fun `POST with some return values`() {
         val potato = Potato(
-            method = HttpMethod.POST,
-            path = "/create-user",
+            method = HttpMethod.POST, path = "/create-user",
 
-            ContentType.JSON,
-            is200Verification
+            ContentType.JSON, is200Expectation
         )
 
         baseCannon.fire(potato)
@@ -606,11 +767,8 @@ class PotatoCannonTest {
     fun `POST with all kinds of methods`() {
         val potatoes = HttpMethod.entries.map {
             Potato(
-                method = it,
-                path = "/not-available-endpoint",
-                body = TextBody("{ }"),
-                configuration = listOf(
-                    ResultVerification(is404)
+                method = it, path = "/not-available-endpoint", body = TextBody("{ }"), configuration = listOf(
+                    is404Expectation
                 )
             )
         }.toList()
@@ -622,19 +780,15 @@ class PotatoCannonTest {
     @Test
     fun `POST calls can be chained`() {
         val firstPotato = Potato(
-            method = HttpMethod.POST,
-            path = "/first-call",
-            is200Verification
+            method = HttpMethod.POST, path = "/first-call", is200Expectation
         )
 
         val result = baseCannon.fireOne(firstPotato)
 
         baseCannon.fire(
-            firstPotato
-                .withPath("/second-call")
-                .withAmendedConfiguration(
-                    QueryParam("number", result.responseText() ?: "0")
-                )
+            firstPotato.withPath("/second-call").addConfiguration(
+                QueryParam("number", result.responseText() ?: "0")
+            )
         )
 
     }
@@ -648,8 +802,8 @@ class PotatoCannonTest {
             path = "/test",
             body = BinaryBody(binaryContent),
             ContentType.OCTET_STREAM,
-            is200Verification,
-            isHelloResponseVerification
+            is200Expectation,
+            isHelloResponseExpectation
         )
 
 

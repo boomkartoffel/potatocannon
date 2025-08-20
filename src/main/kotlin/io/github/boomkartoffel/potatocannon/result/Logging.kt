@@ -6,14 +6,19 @@ import io.github.boomkartoffel.potatocannon.potato.PotatoBody
 import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
-import io.github.boomkartoffel.potatocannon.strategy.ResultVerification
+import io.github.boomkartoffel.potatocannon.strategy.ExpectationResult
 import java.io.PrintWriter
 import java.io.StringWriter
-import java.nio.charset.Charset
 import kotlin.collections.component1
 import kotlin.collections.component2
 
-internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verification: List<ResultVerification>) {
+private const val ANSI_RESET = "\u001B[0m"
+private const val ANSI_GREEN = "\u001B[32m"
+private const val ANSI_RED = "\u001B[31m"
+
+private const val exclamationSign = "⚠️"
+
+internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expectationResults: List<ExpectationResult>) {
 
     if (strategy == Logging.OFF) return
 
@@ -38,7 +43,9 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verific
         }
     }
 
-    if (requestHeaders.toMap().isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }) {
+    if (requestHeaders.toMap()
+            .isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }
+    ) {
         builder.appendLine("|    Headers:")
         val mask = logExcludes.any { it == LogExclude.SECURITY_HEADERS }
         builder.appendLine(requestHeaders.toMap().logFilteredHeaders(mask).joinToString("\n"))
@@ -55,7 +62,9 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verific
     builder.appendLine("|    Time:    ${durationMillis}ms")
 
 
-    if (responseHeaders.toMap().isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }) {
+    if (responseHeaders.toMap()
+            .isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.HEADERS }
+    ) {
         builder.appendLine("|    Headers:")
         val mask = logExcludes.any { it == LogExclude.SECURITY_HEADERS }
         builder.appendLine(responseHeaders.toMap().logFilteredHeaders(mask).joinToString("\n"))
@@ -65,17 +74,12 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verific
     if (responseBody != null && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
         builder.appendLine("|    Body:")
 
-        val charset = responseHeaders["content-type"]
-            ?.firstOrNull()
-            ?.let(::extractCharset)
-            ?: Charsets.UTF_8
-
-        builder.appendLine(responseText(charset)?.prettifyIndented())
+        builder.appendLine(responseText()?.prettifyIndented())
     }
 
     if (error != null) {
         builder.appendLine("| ")
-        builder.appendLine("| ⚠️ Error:")
+        builder.appendLine("| $exclamationSign Error:")
         builder.appendLine("|    ${error::class.simpleName}: ${error.message}")
 
         val stackTrace = StringWriter().also { sw ->
@@ -85,20 +89,50 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, verific
         builder.appendLine(stackTrace.prettifyIndented())
     }
 
-    if (verification.isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.VERIFICATIONS }) {
-        val (unnamed, named) = verification.partition { it.description.isBlank() }
+    val greenCheck = "$ANSI_GREEN✔$ANSI_RESET"
+    val redCross = "$ANSI_RED✘$ANSI_RESET"
+
+    if (expectationResults.isNotEmpty() &&
+        strategy >= Logging.FULL &&
+        logExcludes.none { it == LogExclude.VERIFICATIONS }
+    ) {
+        val (unnamed, named) = expectationResults.partition { it.expectation.description.isBlank() }
 
         builder.appendLine("| ")
-        builder.appendLine("| \uD83D\uDD0D️ Verifications (${verification.size}):")
+        builder.appendLine("| 🔍 Expectations (${expectationResults.size}):")
 
+        // Summarize unnamed verifications (no description)
         if (unnamed.isNotEmpty()) {
-            val label =
-                if (unnamed.size == 1) "1 undescribed verification" else "${unnamed.size} undescribed verifications"
-            builder.appendLine("|      - $label")
+            val passed = unnamed.count { it.error == null }
+            val assertionFailed = unnamed.count { it.isAssertionError }
+            val otherFailed = unnamed.size - passed - assertionFailed
+
+            val checkmark = if (assertionFailed > 0) {
+                redCross
+            } else if (otherFailed > 0) {
+                exclamationSign
+            } else {
+                greenCheck
+            }
+
+            val label = if (unnamed.size == 1) "1 unnamed checks" else "${unnamed.size} unnamed check"
+            builder.appendLine("|      $checkmark $label ($passed passed, $assertionFailed failed, $otherFailed other errors)")
         }
 
-        named.forEach {
-            builder.appendLine("|      - ${it.description}")
+        // List named verifications with pass/fail marker
+        named.forEachIndexed { idx, vr ->
+            val desc = vr.expectation.description
+
+            val checkmark = if (vr.isAssertionError) {
+                redCross
+            } else if (vr.error != null) {
+                exclamationSign
+            } else {
+                greenCheck
+            }
+
+            builder.appendLine("|      $checkmark $desc")
+
         }
     }
 
@@ -163,17 +197,3 @@ private fun String.prettifyJsonIfPossible(): String? {
     }
 }
 
-private fun extractCharset(contentType: String): Charset? {
-    return contentType
-        .split(";")
-        .map { it.trim() }
-        .firstOrNull { it.startsWith("charset=", ignoreCase = true) }
-        ?.substringAfter("=")
-        ?.let {
-            try {
-                Charset.forName(it)
-            } catch (e: Exception) {
-                null
-            }
-        }
-}

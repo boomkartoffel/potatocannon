@@ -9,7 +9,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  * Examples:
  * - [QueryParam]
  * - [CustomHeader]
- * - [ResultVerification]
+ * - [Expectation]
  *
  * For configurations that can only be applied once (e.g., logging, auth headers), the last one will be applied, i.e. PotatoConfiguration will override CannonConfiguration.
  */
@@ -24,7 +24,7 @@ sealed interface PotatoConfiguration
  * Examples:
  * - [FireMode]
  * - [Logging]
- * - [ResultVerification]
+ * - [Expectation]
  *
  * For configurations that can only be applied once (e.g., logging, auth headers), the last one will be applied, i.e. PotatoConfiguration will override CannonConfiguration.
  *

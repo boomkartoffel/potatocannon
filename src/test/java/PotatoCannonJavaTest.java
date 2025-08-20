@@ -22,14 +22,14 @@ public class PotatoCannonJavaTest {
         TestBackend.INSTANCE.stop();
     }
 
-    private final Expectation is200 = result -> Assertions.assertEquals(200, result.getStatusCode());
+    private final Check is200 = result -> Assertions.assertEquals(200, result.getStatusCode());
 
     @Test
     public void getRequest_returnsHello() {
         Potato potato = new Potato(
                 HttpMethod.GET,
                 "/test",
-                new ResultVerification(result -> {
+                new Expectation(result -> {
                     Assertions.assertEquals("Hello", result.getResponseBody());
                 })
         );
@@ -38,7 +38,7 @@ public class PotatoCannonJavaTest {
                 "http://localhost:" + port,
                 List.of(
                         FireMode.SEQUENTIAL,
-                        new ResultVerification(is200)
+                        new Expectation(is200)
                 )
         );
 

@@ -1,10 +1,14 @@
 package io.github.boomkartoffel.potatocannon.result
 
+import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
+import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
 import io.github.boomkartoffel.potatocannon.potato.Potato
+import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
 import java.nio.charset.Charset
 
 private val defaultCharset = Charsets.UTF_8
-private val defaultSerialization = DeserializationFormat.JSON
+private val defaultFormat = DeserializationFormat.JSON
+private const val contentTypeHeaderName = "content-type"
 
 class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
 
@@ -41,75 +45,97 @@ class Result internal constructor(
     val responseHeaders: Headers,
     val queryParams: Map<String, List<String>>,
     val durationMillis: Long,
+    //this is not a configuration, but a list of strategies that are necessary for deserialization, and it is not supposed to be accessed by the user
+    private val deserializationStrategies : List<DeserializationStrategy>,
     val error: Throwable?
 ) {
 
     fun responseText(charset: Charset): String? {
         return try {
             responseBody?.toString(charset)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null // invalid charset or malformed content
         }
     }
 
     fun responseText(): String? {
-        return responseText(defaultCharset)
+        return responseText(responseCharset())
     }
 
-    fun <T> bodyAsSingle(clazz: Class<T>): T = bodyAsSingle(clazz, defaultSerialization)
-    fun <T> bodyAsSingle(clazz: Class<T>, charset: Charset): T = bodyAsSingle(clazz, defaultSerialization, charset)
-    fun <T> bodyAsSingle(clazz: Class<T>, format: DeserializationFormat): T = bodyAsSingle(clazz, format, defaultCharset)
-    fun <T> bodyAsSingle(clazz: Class<T>, deserializer: SingleDeserializer): T =
-        bodyAsSingle(clazz, deserializer, defaultCharset)
+    fun <T> bodyAsObject(clazz: Class<T>): T = bodyAsObject(clazz, defaultFormat)
+    fun <T> bodyAsObject(clazz: Class<T>, charset: Charset): T = bodyAsObject(clazz, defaultFormat, charset)
+    fun <T> bodyAsObject(clazz: Class<T>, format: DeserializationFormat): T = bodyAsObject(clazz, format, responseCharset())
+    fun <T> bodyAsObject(clazz: Class<T>, deserializer: Deserializer): T =
+        bodyAsObject(clazz, deserializer, responseCharset())
 
-    fun <T> bodyAsSingle(clazz: Class<T>, format: DeserializationFormat, charset: Charset): T {
+    fun <T> bodyAsObject(clazz: Class<T>, format: DeserializationFormat, charset: Charset): T {
         val deserializer = when (format) {
-            DeserializationFormat.JSON -> JsonDeserializer
-            DeserializationFormat.XML -> XmlDeserializer
+            DeserializationFormat.JSON -> JsonDeserializer(deserializationStrategies)
+            DeserializationFormat.XML -> XmlDeserializer(deserializationStrategies)
         }
 
-        return bodyAsSingle(clazz, deserializer, charset)
+        return bodyAsObject(clazz, deserializer, charset)
     }
 
-    fun <T> bodyAsList(clazz: Class<T>): List<T> = bodyAsList(clazz, defaultSerialization, defaultCharset)
+    fun <T> bodyAsList(clazz: Class<T>): List<T> = bodyAsList(clazz, defaultFormat, responseCharset())
     fun <T> bodyAsList(clazz: Class<T>, charset: Charset): List<T> =
-        bodyAsList(clazz, defaultSerialization, charset)
+        bodyAsList(clazz, defaultFormat, charset)
 
     fun <T> bodyAsList(clazz: Class<T>, format: DeserializationFormat): List<T> =
-        bodyAsList(clazz, format, defaultCharset)
+        bodyAsList(clazz, format, responseCharset())
 
-    fun <T> bodyAsList(clazz: Class<T>, deserializer: ListDeserializer): List<T> =
-        bodyAsList(clazz, deserializer, defaultCharset)
+    fun <T> bodyAsList(clazz: Class<T>, deserializer: Deserializer): List<T> =
+        bodyAsList(clazz, deserializer, responseCharset())
 
     fun <T> bodyAsList(clazz: Class<T>, format: DeserializationFormat, charset: Charset): List<T> {
         val deserializer = when (format) {
-            DeserializationFormat.JSON -> JsonDeserializer
-            DeserializationFormat.XML -> XmlDeserializer
+            DeserializationFormat.JSON -> JsonDeserializer(deserializationStrategies)
+            DeserializationFormat.XML -> XmlDeserializer(deserializationStrategies)
         }
 
         return bodyAsList(clazz, deserializer, charset)
     }
 
 
-    fun <T> bodyAsSingle(clazz: Class<T>, deserializer: SingleDeserializer, charset: Charset): T {
+    fun <T> bodyAsObject(clazz: Class<T>, deserializer: Deserializer, charset: Charset): T {
         val text = responseText(charset)
-            ?: throw IllegalStateException("Response body is null")
+            ?: throw ResponseBodyMissingException()
         return try {
-            deserializer.deserializeSingle(text, clazz)
+            deserializer.deserializeObject(text, clazz)
         } catch (e: Exception) {
-            throw IllegalArgumentException("Failed to deserialize response body as ${clazz.name}", e)
+            throw DeserializationFailureException(clazz.name, e)
         }
     }
 
-    fun <T> bodyAsList(clazz: Class<T>, deserializer: ListDeserializer, charset: Charset): List<T> {
+    fun <T> bodyAsList(clazz: Class<T>, deserializer: Deserializer, charset: Charset): List<T> {
         val text = responseText(charset)
-            ?: throw IllegalStateException("Response body is null")
+            ?: throw ResponseBodyMissingException()
         return try {
             deserializer.deserializeList(text, clazz)
         } catch (e: Exception) {
-            throw IllegalArgumentException("Failed to deserialize response body as List<${clazz.name}>", e)
-        }
+            throw DeserializationFailureException(clazz.name, e)        }
     }
 
+    private fun responseCharset(): Charset {
+        return responseHeaders[contentTypeHeaderName]
+            ?.firstOrNull()
+            ?.let { extractCharset(it) }
+            ?: defaultCharset
+    }
 
+}
+
+private fun extractCharset(contentType: String): Charset? {
+    return contentType
+        .split(";")
+        .map { it.trim() }
+        .firstOrNull { it.startsWith("charset=", ignoreCase = true) }
+        ?.substringAfter("=")
+        ?.let {
+            try {
+                Charset.forName(it)
+            } catch (_: Exception) {
+                null
+            }
+        }
 }

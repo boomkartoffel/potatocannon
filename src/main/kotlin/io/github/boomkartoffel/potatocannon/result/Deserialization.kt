@@ -1,25 +1,35 @@
 package io.github.boomkartoffel.potatocannon.result
 
 import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.MapperFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.dataformat.xml.XmlMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.KotlinFeature
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+
+import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObject
+import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
+import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
+import io.github.boomkartoffel.potatocannon.strategy.JavaTimeSupport
+import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
+import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
+import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode
 
 /**
- * Strategy interface for deserializing a single object from a raw string.
+ * Strategy interface for deserializing objects from a raw string.
  *
  * Implementations define how to convert serialized data (e.g. JSON, XML, CSV) into a Kotlin or Java object
  * of the specified class.
  *
  * Example usage (with a JSON implementation):
  * ```
- * val user: User = jsonDeserializer.deserializeSingle(data, User::class.java)
+ * val user: User = jsonDeserializer.deserialize(data, User::class.java)
  * ```
  *
- * @see ListDeserializer for deserializing lists
  */
-interface SingleDeserializer {
+interface Deserializer {
     /**
      * Deserialize the given string into an instance of the specified class.
      *
@@ -28,23 +38,7 @@ interface SingleDeserializer {
      * @param targetClass the class to deserialize into
      * @return the deserialized object of type [T]
      */
-    fun <T> deserializeSingle(data: String, targetClass: Class<T>): T
-}
-
-/**
- * Strategy interface for deserializing a list of objects from a raw string.
- *
- * Implementations define how to convert serialized data (e.g. JSON array, XML list, CSV rows)
- * into a list of Kotlin or Java objects of the specified class.
- *
- * Example usage (with a JSON implementation):
- * ```
- * val users: List<User> = jsonDeserializer.deserializeList(data, User::class.java)
- * ```
- *
- * @see SingleDeserializer for deserializing individual objects
- */
-interface ListDeserializer {
+    fun <T> deserializeObject(data: String, targetClass: Class<T>): T
 
     /**
      * Deserialize the given string into a list of instances of the specified class.
@@ -57,20 +51,70 @@ interface ListDeserializer {
     fun <T> deserializeList(data: String, targetClass: Class<T>): List<T>
 }
 
-internal object JsonDeserializer : SingleDeserializer, ListDeserializer {
-    internal val mapper = ObjectMapper()
-        .registerModule(
-            KotlinModule.Builder()
+
+// Defaults:
+// - Nulls: strict (respect Kotlin nullability)
+// - Unknown properties: ignored (library-friendly)
+// - Other toggles: off unless specified
+private fun buildMapper(strategies: List<DeserializationStrategy>, format: DeserializationFormat): ObjectMapper {
+    var nullCoercion: NullCoercion = NullCoercion.STRICT
+    var unknownProps: UnknownPropertyMode = UnknownPropertyMode.IGNORE
+    var javaTime = false
+    var caseInsensitive = false
+    var emptyStringAsNull = false
+    var unknownEnumAsDefault = false
+
+    strategies.forEach { s ->
+        when (s) {
+            is NullCoercion -> nullCoercion = s
+            is UnknownPropertyMode -> unknownProps = s
+            JavaTimeSupport -> javaTime = true
+            CaseInsensitiveProperties -> caseInsensitive = true
+            AcceptEmptyStringAsNullObject -> emptyStringAsNull = true
+            UnknownEnumAsDefault -> unknownEnumAsDefault = true
+        }
+    }
+
+    val kotlinModuleBuilder = KotlinModule.Builder()
+        .configure(KotlinFeature.SingletonSupport, true)
+
+    when (nullCoercion) {
+        NullCoercion.STRICT ->
+            kotlinModuleBuilder.configure(KotlinFeature.NewStrictNullChecks, true)
+
+        NullCoercion.RELAX ->
+            kotlinModuleBuilder
+                .configure(KotlinFeature.NewStrictNullChecks, false)
                 .configure(KotlinFeature.NullToEmptyCollection, true)
                 .configure(KotlinFeature.NullToEmptyMap, true)
                 .configure(KotlinFeature.NullIsSameAsDefault, true)
-                .configure(KotlinFeature.SingletonSupport, true)
-                .configure(KotlinFeature.StrictNullChecks, false)
-                .build()
-        )
-        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    }
 
-    override fun <T> deserializeSingle(data: String, targetClass: Class<T>): T {
+    val builder = when (format) {
+        DeserializationFormat.JSON -> JsonMapper.builder()
+        DeserializationFormat.XML -> XmlMapper.builder()
+    }
+
+    builder.addModule(kotlinModuleBuilder.build())
+
+    when (unknownProps) {
+        UnknownPropertyMode.IGNORE -> builder.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        UnknownPropertyMode.FAIL -> builder.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+    }
+
+    if (javaTime) builder.addModule(JavaTimeModule())
+    if (caseInsensitive) builder.enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES)
+    if (emptyStringAsNull) builder.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)
+    if (unknownEnumAsDefault) builder.enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE)
+
+    return builder.build()
+}
+
+internal class JsonDeserializer(val deserializationStrategies: List<DeserializationStrategy>) : Deserializer {
+    internal val mapper: ObjectMapper = buildMapper(deserializationStrategies, DeserializationFormat.JSON)
+
+
+    override fun <T> deserializeObject(data: String, targetClass: Class<T>): T {
         return mapper.readValue(data, targetClass)
     }
 
@@ -80,26 +124,17 @@ internal object JsonDeserializer : SingleDeserializer, ListDeserializer {
     }
 }
 
-internal object XmlDeserializer : SingleDeserializer, ListDeserializer {
-    val xmlMapper: XmlMapper = XmlMapper()
-        .registerModule(
-            KotlinModule.Builder()
-                .configure(KotlinFeature.NullToEmptyCollection, true)
-                .configure(KotlinFeature.NullToEmptyMap, true)
-                .configure(KotlinFeature.NullIsSameAsDefault, true)
-                .configure(KotlinFeature.SingletonSupport, true)
-                .configure(KotlinFeature.StrictNullChecks, false)
-                .build()
-        )
-        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false) as XmlMapper
+internal class XmlDeserializer(val deserializationStrategies: List<DeserializationStrategy>) : Deserializer {
+    val mapper: ObjectMapper = buildMapper(deserializationStrategies, DeserializationFormat.XML)
+
 
     override fun <T> deserializeList(data: String, targetClass: Class<T>): List<T> {
-        val listType = xmlMapper.typeFactory.constructCollectionType(List::class.java, targetClass)
-        return xmlMapper.readValue(data, listType)
+        val listType = mapper.typeFactory.constructCollectionType(List::class.java, targetClass)
+        return mapper.readValue(data, listType)
     }
 
-    override fun <T> deserializeSingle(data: String, targetClass: Class<T>): T {
-        return xmlMapper.readValue(data, targetClass)
+    override fun <T> deserializeObject(data: String, targetClass: Class<T>): T {
+        return mapper.readValue(data, targetClass)
     }
 }
 
@@ -108,7 +143,7 @@ internal object XmlDeserializer : SingleDeserializer, ListDeserializer {
  * Indicates which format should be used when deserializing response bodies
  * using the library’s built-in default mappers.
  *
- * @see io.github.boomkartoffel.potatocannon.result.Result.bodyAsSingle
+ * @see io.github.boomkartoffel.potatocannon.result.Result.bodyAsObject
  * @see io.github.boomkartoffel.potatocannon.result.Result.bodyAsList
  */
 enum class DeserializationFormat {

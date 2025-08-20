@@ -5,30 +5,36 @@ import io.github.boomkartoffel.potatocannon.result.Result
 /**
  * A configuration that defines how a result should be verified after a request is fired.
  *
- * Combines an [Expectation] with an optional human-readable [description] for logging.
+ * Combines a [Check] with an optional human-readable [description] for logging.
  *
  * This configuration can be applied to individual Potatoes or globally to the Cannon.
  *
- * @param expectation the condition that should be met by the [Result].
+ * @param check the condition that should be met by the [Result].
  * @param description an optional description of the verification. This text will be shown in the log when the verification is executed.
  */
-class ResultVerification(val description: String, private val expectation: Expectation) : PotatoConfiguration,
+class Expectation(val description: String, private val check: Check) : PotatoConfiguration,
     CannonConfiguration {
 
-    constructor(expectation: Expectation) : this(
+    constructor(check: Check) : this(
         "",
-        expectation
+        check
     )
 
-    fun verify(result: Result) {
-        expectation.verify(result)
+    internal fun verify(result: Result): ExpectationResult {
+        try {
+            check.check(result)
+            return ExpectationResult(this, null, false)
+        } catch (ae: AssertionError) {
+            return ExpectationResult(this, ae, true)
+        } catch (e: Throwable) {
+            // Catch all other exceptions to ensure we always return an ExpectationResult
+            return ExpectationResult(this, e, false)
+        }
     }
-
-    /**
-     * Creates a new [ResultVerification] with a description.
-     */
-    fun withDescription(description: String) = expectation.withDescription(description)
 }
+
+internal class ExpectationResult(val expectation: Expectation, val error: Throwable?, val isAssertionError: Boolean)
+
 
 /**
  * A functional interface representing a verification rule against a [Result].
@@ -39,29 +45,29 @@ class ResultVerification(val description: String, private val expectation: Expec
  *
  * Example using JUnit:
  * ```
- * val is200 = Expectation { result ->
- *     Assertions.assertEquals(200, result.statusCode)
+ * val is200 = Check { result ->
+ *     assertEquals(200, result.statusCode)
  * }
  * ```
  *
  * You can also wrap this with a description using [withDescription].
  */
-fun interface Expectation {
-    fun verify(result: Result)
+fun interface Check : PotatoConfiguration, CannonConfiguration {
+    fun check(result: Result)
 }
 
 /**
- * Wraps this [Expectation] into a [ResultVerification] with the given [description].
+ * Wraps this [Check] into an [Expectation] with the given [description].
  *
  * This allows for concise and expressive test definitions.
  *
  * Example:
  * ```
- * val isOk = Expectation { result -> assertEquals(200, result.statusCode) }
- * val check = isOk.withDescription("Should return 200 OK")
+ * val isOk = Check { result -> assertEquals(200, result.statusCode) }
+ * val isOkExpectation = isOk.withDescription("Should return 200 OK")
  * ```
  *
  * @param description human-readable description shown in logs or test reports
- * @return a [ResultVerification] combining this expectation with the description
+ * @return an [Expectation] combining this check with the description
  */
-fun Expectation.withDescription(description: String) = ResultVerification(description, this)
+fun Check.withDescription(description: String) = Expectation(description, this)
