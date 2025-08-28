@@ -9,7 +9,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  * Defaults:
  * - [UnknownPropertyMode] → [UnknownPropertyMode.IGNORE]
  * - [NullCoercion] → [NullCoercion.STRICT]
- * - All feature toggles → disabled
+ * - All other feature toggles → disabled
  */
 sealed interface DeserializationStrategy : CannonConfiguration, PotatoConfiguration
 
@@ -35,7 +35,7 @@ enum class UnknownPropertyMode : DeserializationStrategy {
  *   - `null` collection → `emptyList` / `emptySet`
  *   - `null` map → `emptyMap`
  *   - `null` property with a default value in the data class → default is applied
- *   - Non-nullable types are allowed to be assigned `null` (effectively relaxed)
+ *   - `null` property without a default value → deserialization fails
  */
 enum class NullCoercion : DeserializationStrategy {
     STRICT,

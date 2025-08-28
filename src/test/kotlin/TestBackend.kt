@@ -85,6 +85,26 @@ object TestBackend {
                     call.respond(json)
                 }
 
+                post("/empty-enum") {
+                    val json = """
+                            {
+                                "enum": "",
+                                "enum2": ""
+                            }
+                            """.trimIndent()
+                    call.respond(json)
+                }
+
+                post("/empty-enum-and-not-matched") {
+                    val json = """
+                            {
+                                "enum": "",
+                                "enum2": "UNKNOWN"
+                            }
+                            """.trimIndent()
+                    call.respond(json)
+                }
+
                 post("/create-user-list") {
                     val user = User(1, "Max Muster", "max@muster.com")
                     call.respond(listOf(user))
@@ -244,6 +264,23 @@ object TestBackend {
         }
 
         server?.start(wait = false)
+
+        waitForPort("127.0.0.1", port)
+    }
+
+    private fun waitForPort(host: String, port: Int, timeoutMs: Long = 5_000) {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000
+        while (System.nanoTime() < deadline) {
+            try {
+                java.net.Socket().use { s ->
+                    s.connect(java.net.InetSocketAddress(host, port), /*connectTimeoutMs*/ 150)
+                    return
+                }
+            } catch (_: Exception) {
+                Thread.sleep(25)
+            }
+        }
+        error("Server didn’t open $host:$port within ${timeoutMs}ms")
     }
 
     fun stop() {

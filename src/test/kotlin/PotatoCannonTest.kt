@@ -1,5 +1,6 @@
 package io.github.boomkartoffel.potatocannon
 
+import com.fasterxml.jackson.annotation.JsonEnumDefaultValue
 import io.github.boomkartoffel.potatocannon.strategy.BasicAuth
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
@@ -26,6 +27,7 @@ import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
 import io.github.boomkartoffel.potatocannon.strategy.JavaTimeSupport
 import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
+import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
 import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode
 import io.github.boomkartoffel.potatocannon.strategy.withDescription
 import io.kotest.assertions.throwables.shouldNotThrow
@@ -60,6 +62,17 @@ data class CreateUser(
 
 data class EmptyStringToNullCheckObject(
     val user: CreateUser?
+)
+
+enum class EmptyEnumCheck {
+    @JsonEnumDefaultValue
+    NONE,
+    SOME
+}
+
+data class EmptyEnumCheckObject(
+    val enum: EmptyEnumCheck,
+    val enum2: EmptyEnumCheck
 )
 
 data class NullCheckObject(
@@ -123,7 +136,7 @@ class PotatoCannonTest {
         port = Random.nextInt(30_000, 60_000)
         TestBackend.start(port)
         baseCannon = Cannon(
-            baseUrl = "http://localhost:$port",
+            baseUrl = "http://127.0.0.1:$port",
         )
 
         val warmUpPotato = Potato(
@@ -175,7 +188,7 @@ class PotatoCannonTest {
         }
 
         val start = System.currentTimeMillis()
-        baseCannon.withAmendedConfiguration(FireMode.SEQUENTIAL).fire(potatoes)
+        baseCannon.addConfiguration(FireMode.SEQUENTIAL).fire(potatoes)
         val end = System.currentTimeMillis()
         val durationMs = end - start
 
@@ -212,21 +225,17 @@ class PotatoCannonTest {
             isHelloResponseExpectation
         )
 
-
-        val cannon = Cannon(
-            baseUrl = "http://localhost:$port",
-        )
-
-        cannon.fire(potato)
+        baseCannon.fire(potato)
     }
 
     @Test
     fun `POST request from readme`() {
-        val cannon = Cannon(
-            baseUrl = "http://localhost:$port", configuration = listOf(
-                BasicAuth("user", "pass")
+        val cannon = baseCannon
+            .addConfiguration(
+                listOf(
+                    BasicAuth("user", "pass")
+                )
             )
-        )
 
         val potato = Potato(
             method = HttpMethod.POST,
@@ -463,6 +472,40 @@ class PotatoCannonTest {
     }
 
     @Test
+    fun `deserialization sets enum to default values`() {
+        val check = Check { result: Result ->
+            val enum = result.bodyAsObject(EmptyEnumCheckObject::class.java)
+            enum.enum shouldBe EmptyEnumCheck.NONE
+            enum.enum2 shouldBe EmptyEnumCheck.NONE
+        }
+
+        val potato = Potato(
+            method = HttpMethod.POST,
+            path = "/empty-enum",
+            check
+        )
+
+        val potatoWithUnknownValue = potato
+            .withPath("/empty-enum-and-not-matched")
+
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                //default is disabled
+                potato,
+            )
+        }
+
+        shouldNotThrow<DeserializationFailureException> {
+            baseCannon
+                .addConfiguration(UnknownEnumAsDefault)
+                .fire(
+                    potato,
+                    potatoWithUnknownValue
+                )
+        }
+    }
+
+    @Test
     fun `POST request to create user returns serializable XML and can be deserialized with a different charset`() {
         val expectSingle = Check { result: Result ->
             val created = result.bodyAsObject(CreateUser::class.java, DeserializationFormat.XML, Charsets.UTF_32)
@@ -630,10 +673,7 @@ class PotatoCannonTest {
             )
         }
 
-        val cannon = Cannon(
-            baseUrl = "http://localhost:$port",
-            FireMode.SEQUENTIAL,
-        )
+        val cannon = baseCannon.withFireMode(FireMode.SEQUENTIAL)
 
         cannon.fire(baseLoggingPotatoes + baseLoggingPotatoesWithExcludes)
     }
@@ -659,7 +699,7 @@ class PotatoCannonTest {
                 })
         )
 
-        val cannon = baseCannon.withAmendedConfiguration(
+        val cannon = baseCannon.addConfiguration(
             listOf(
                 BasicAuth(
                     username = "user", password = "password"

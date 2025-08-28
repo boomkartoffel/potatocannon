@@ -56,7 +56,7 @@ class Cannon {
     }
 
     fun withFireMode(mode: FireMode): Cannon {
-        return withAmendedConfiguration(mode)
+        return addConfiguration(mode)
     }
 
     /**
@@ -67,8 +67,8 @@ class Cannon {
      * @param additionalConfiguration The new configuration strategies to add.
      * @return A new `Cannon` with extended configuration.
      */
-    fun withAmendedConfiguration(vararg additionalConfiguration: CannonConfiguration): Cannon =
-        this.withAmendedConfiguration(additionalConfiguration.toList())
+    fun addConfiguration(vararg additionalConfiguration: CannonConfiguration): Cannon =
+        this.addConfiguration(additionalConfiguration.toList())
 
     /**
      * Returns a new `Cannon` instance with additional configuration strategies appended. This means that strategies like [FireMode], which resolve to the last one trumping the previous ones, will be applied.
@@ -78,7 +78,7 @@ class Cannon {
      * @param additionalConfiguration The new configuration strategies to add.
      * @return A new `Cannon` with extended configuration.
      */
-    fun withAmendedConfiguration(additionalConfiguration: List<CannonConfiguration>): Cannon =
+    fun addConfiguration(additionalConfiguration: List<CannonConfiguration>): Cannon =
         Cannon(baseUrl, configuration + additionalConfiguration)
 
     /**
