@@ -1,9 +1,11 @@
 package io.github.boomkartoffel.potatocannon
 
-import com.fasterxml.jackson.annotation.JsonEnumDefaultValue
 import io.github.boomkartoffel.potatocannon.strategy.BasicAuth
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
+import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
+import io.github.boomkartoffel.potatocannon.exception.ExecutionFailureException
+import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.strategy.ContentType
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
@@ -35,8 +37,10 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import java.time.Duration
@@ -65,9 +69,10 @@ data class EmptyStringToNullCheckObject(
 )
 
 enum class EmptyEnumCheck {
-    @JsonEnumDefaultValue
+    @EnumDefaultValue
     NONE,
-    SOME
+    SOME,
+
 }
 
 data class EmptyEnumCheckObject(
@@ -177,6 +182,63 @@ class PotatoCannonTest {
     }
 
     @Test
+    fun `Requests with illegal URI or illegal header are not executed`() {
+
+        val basePotato = Potato(
+            method = HttpMethod.GET, path = "/test"
+        )
+
+        val illegalUri = basePotato.addConfiguration(OverrideBaseUrl("127.0.0.1"))
+        val illegalHeader = basePotato.addConfiguration(CustomHeader("Invalid:Header\n", "value"))
+
+        val cannon = baseCannon.withFireMode(FireMode.SEQUENTIAL)
+
+        shouldThrow<ExecutionFailureException> {
+            cannon.fire(illegalUri)
+        }
+        shouldThrow<ExecutionFailureException> {
+            cannon.fire(illegalHeader)
+        }
+    }
+
+    @Test
+    fun `Requests to non-existing server will have http request errors`() {
+
+        val nonExistingBase = Potato(
+            method = HttpMethod.GET, path = "/test", Check {
+                it.statusCode shouldBe -1
+                it.error shouldNotBe null
+                it.error.shouldBeInstanceOf<java.net.ConnectException>()
+            }, OverrideBaseUrl("http://127.0.0.1:9999")
+        )
+
+        baseCannon.fire(nonExistingBase)
+    }
+
+    @Test
+    fun `Deserialization attempts at responses with no body fail with NoBodyException`() {
+
+        val checkBodyNull = Check {
+            it.responseText() shouldBe null
+        }
+        val tryConversionOnNullBodyFails = Check {
+            it.bodyAsObject(CreateUser::class.java)
+        }
+
+        val basePotato = Potato(
+            method = HttpMethod.GET, path = "/no-body"
+        )
+
+        shouldNotThrow<ResponseBodyMissingException> {
+            baseCannon.fire(basePotato.addConfiguration(checkBodyNull))
+        }
+
+        shouldThrow<ResponseBodyMissingException> {
+            baseCannon.fire(basePotato.addConfiguration(tryConversionOnNullBodyFails))
+        }
+    }
+
+    @Test
     fun `GET request times 10 to test-wait takes at least 5 seconds in sequential mode`() {
         val potatoes = (1..10).map {
             Potato(
@@ -188,7 +250,9 @@ class PotatoCannonTest {
         }
 
         val start = System.currentTimeMillis()
-        baseCannon.addConfiguration(FireMode.SEQUENTIAL).fire(potatoes)
+        baseCannon
+            .addConfiguration(FireMode.SEQUENTIAL)
+            .fire(potatoes)
         val end = System.currentTimeMillis()
         val durationMs = end - start
 
@@ -203,7 +267,6 @@ class PotatoCannonTest {
                 method = HttpMethod.GET, path = "/test-wait-parallel", is200Expectation, isHelloResponseExpectation
             )
         }
-
 
         val start = System.currentTimeMillis()
         baseCannon.fire(potatoes)
@@ -448,7 +511,7 @@ class PotatoCannonTest {
         val check = Check { result: Result ->
             val emptyUser = result.bodyAsObject(EmptyStringToNullCheckObject::class.java)
             emptyUser.user shouldBe null
-        }
+        }.withDescription("Response is correctly deserialized and empty string is mapped to null")
 
         val potato = Potato(
             method = HttpMethod.POST,
@@ -473,34 +536,60 @@ class PotatoCannonTest {
 
     @Test
     fun `deserialization sets enum to default values`() {
-        val check = Check { result: Result ->
+        val checkJson = Check { result: Result ->
             val enum = result.bodyAsObject(EmptyEnumCheckObject::class.java)
             enum.enum shouldBe EmptyEnumCheck.NONE
             enum.enum2 shouldBe EmptyEnumCheck.NONE
         }
 
-        val potato = Potato(
+        val checkXml = Check { result: Result ->
+            val enum = result.bodyAsObject(EmptyEnumCheckObject::class.java, DeserializationFormat.XML)
+            enum.enum shouldBe EmptyEnumCheck.NONE
+            enum.enum2 shouldBe EmptyEnumCheck.NONE
+        }
+
+        val typeXmlHeader = QueryParam("type", "xml")
+
+        val potatoJson = Potato(
             method = HttpMethod.POST,
             path = "/empty-enum",
-            check
+            checkJson
         )
 
-        val potatoWithUnknownValue = potato
+        val potatoXml = potatoJson
+            .withPath("/empty-enum")
+            .withConfiguration(typeXmlHeader, checkXml)
+
+        val potatoWithUnknownValueJson = potatoJson
             .withPath("/empty-enum-and-not-matched")
 
+        val potatoWithUnknownValuesXml = potatoXml
+            .withPath("/empty-enum-and-not-matched")
+            .withConfiguration(typeXmlHeader, checkXml)
+
+        //default is disabled
         shouldThrow<DeserializationFailureException> {
-            baseCannon.fire(
-                //default is disabled
-                potato,
-            )
+            baseCannon.fire(potatoJson)
         }
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(potatoWithUnknownValueJson)
+        }
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(potatoXml)
+        }
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(potatoWithUnknownValuesXml)
+        }
+
 
         shouldNotThrow<DeserializationFailureException> {
             baseCannon
                 .addConfiguration(UnknownEnumAsDefault)
                 .fire(
-                    potato,
-                    potatoWithUnknownValue
+                    potatoJson,
+                    potatoWithUnknownValueJson,
+                    potatoXml,
+                    potatoWithUnknownValuesXml
                 )
         }
     }

@@ -14,6 +14,8 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import org.slf4j.bridge.SLF4JBridgeHandler
+import java.net.URI
+import java.net.http.HttpClient
 import java.util.logging.LogManager
 
 
@@ -44,6 +46,14 @@ object TestBackend {
                 json()
             }
             routing {
+                get("/health") {
+                    call.respondText("OK")
+                }
+
+                get("/no-body") {
+                    call.respond(HttpStatusCode.OK)
+                }
+
                 get("/test") {
                     call.respondText("Hello")
                 }
@@ -86,24 +96,47 @@ object TestBackend {
                 }
 
                 post("/empty-enum") {
-                    val json = """
+                    val type = call.request.queryParameters["type"]
+                    if (type == "xml") {
+                        val xml = """
+                            <EmptyEnumCheckObject>
+                                <enum></enum>
+                                <enum2></enum2>
+                            </EmptyEnumCheckObject>
+                        """.trimIndent()
+                        call.respondText(xml, ContentType.Application.Xml)
+                    } else {
+                        val json = """
                             {
                                 "enum": "",
                                 "enum2": ""
                             }
-                            """.trimIndent()
-                    call.respond(json)
+                        """.trimIndent()
+                        call.respondText(json, ContentType.Application.Json)
+                    }
                 }
 
                 post("/empty-enum-and-not-matched") {
-                    val json = """
+                    val type = call.request.queryParameters["type"]
+                    if (type == "xml") {
+                        val xml = """
+                            <EmptyEnumCheckObject>
+                                <enum></enum>
+                                <enum2>UNKNOWN</enum2>
+                            </EmptyEnumCheckObject>
+                        """.trimIndent()
+                        call.respondText(xml, ContentType.Application.Xml)
+                    } else {
+                        val json = """
                             {
                                 "enum": "",
                                 "enum2": "UNKNOWN"
                             }
-                            """.trimIndent()
-                    call.respond(json)
+                        """.trimIndent()
+                        call.respondText(json, ContentType.Application.Json)
+                    }
                 }
+
 
                 post("/create-user-list") {
                     val user = User(1, "Max Muster", "max@muster.com")
@@ -123,7 +156,7 @@ object TestBackend {
                                 "namE": "Max Muster",
                                 "Email": "max@muster.com"
                             },
-                                                                                {
+                            {
                                 "ID": 1,
                                 "NAME": "Max Muster",
                                 "EMAIL": "max@muster.com"
@@ -266,11 +299,12 @@ object TestBackend {
         server?.start(wait = false)
 
         waitForPort("127.0.0.1", port)
+        waitForReady("127.0.0.1:$port")
     }
 
     private fun waitForPort(host: String, port: Int, timeoutMs: Long = 5_000) {
-        val deadline = System.nanoTime() + timeoutMs * 1_000_000
-        while (System.nanoTime() < deadline) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
             try {
                 java.net.Socket().use { s ->
                     s.connect(java.net.InetSocketAddress(host, port), /*connectTimeoutMs*/ 150)
@@ -281,6 +315,20 @@ object TestBackend {
             }
         }
         error("Server didn’t open $host:$port within ${timeoutMs}ms")
+    }
+
+    private fun waitForReady(baseUrl: String, timeoutMs: Long = 5_000) {
+        val http = HttpClient.newHttpClient()
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                val r = java.net.http.HttpRequest.newBuilder(URI.create("http://$baseUrl/health")).GET().build()
+                val s = http.send(r, java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode()
+                if (s == 200) return
+            } catch (_: Exception) { /* ignore */ }
+            Thread.sleep(25)
+        }
+        error("Server not ready at $baseUrl within ${timeoutMs}ms")
     }
 
     fun stop() {

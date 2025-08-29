@@ -29,9 +29,7 @@ public class PotatoCannonJavaTest {
         Potato potato = new Potato(
                 HttpMethod.GET,
                 "/test",
-                new Expectation(result -> {
-                    Assertions.assertEquals("Hello", result.getResponseBody());
-                })
+                new Expectation(result -> Assertions.assertEquals("Hello", result.responseText()))
         );
 
         Cannon cannon = new Cannon(

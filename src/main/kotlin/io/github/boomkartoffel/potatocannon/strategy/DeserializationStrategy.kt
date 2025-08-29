@@ -1,4 +1,6 @@
 package io.github.boomkartoffel.potatocannon.strategy
+import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
+
 
 /**
  * Configurations that influence how the response is deserialized.
@@ -75,7 +77,7 @@ object AcceptEmptyStringAsNullObject : DeserializationStrategy
  * enum value is encountered.
  *
  * To use this, one enum constant must be annotated with
- * `@JsonEnumDefaultValue`.
+ * [EnumDefaultValue]
  *
  * Disabled by default.
  */

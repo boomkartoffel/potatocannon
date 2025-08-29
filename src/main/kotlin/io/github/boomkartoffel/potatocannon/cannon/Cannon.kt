@@ -127,9 +127,9 @@ class Cannon {
 
             for (f in futures) {
                 try {
-                    f.get() // wait; will throw ExecutionException on failure inside task
-                } catch (ee: ExecutionException) {
-                    val cause = ee.cause
+                    f.get()
+                } catch (t: Throwable) {
+                    val cause = t.cause
                     when (cause) {
                         is PotatoCannonException -> throw cause
                         else -> throw ExecutionFailureException(cause)
@@ -185,12 +185,19 @@ class Cannon {
             .filterIsInstance<HeaderStrategy>()
             .forEach { it.apply(allHeaders) }
 
-        val builder = HttpRequest.newBuilder()
-            .uri(URI.create(fullUrl))
+        val builder = try {
+            HttpRequest.newBuilder().uri(URI.create(fullUrl))
+        } catch (t: Throwable) {
+            throw ExecutionFailureException(t)
+        }
 
         allHeaders.forEach { (key, values) ->
             values.forEach { value ->
-                builder.header(key, value)
+                try {
+                    builder.header(key, value)
+                } catch (t: Throwable) {
+                    throw ExecutionFailureException(t)
+                }
             }
 
         }
@@ -200,6 +207,7 @@ class Cannon {
             is BinaryBody -> builder.method(potato.method.name, BodyPublishers.ofByteArray(body.content)).build()
             null -> builder.method(potato.method.name, BodyPublishers.noBody()).build()
         }
+
 
         val baseLogging = configs
             .filterIsInstance<Logging>()
@@ -227,7 +235,7 @@ class Cannon {
                 potato = potato,
                 fullUrl = fullUrl,
                 statusCode = response.statusCode(),
-                responseBody = response.body(),
+                responseBody = response.body().takeIf { it.isNotEmpty() },
                 responseHeaders = Headers(response.headers().map().mapKeys { it.key.lowercase() }),
                 requestHeaders = Headers(request.headers().map().mapKeys { it.key.lowercase() }),
                 durationMillis = duration,
@@ -257,27 +265,9 @@ class Cannon {
 
         result.log(baseLogging, logExcludes, expectationResults)
 
-        val failures = expectationResults.filter { it.error != null }
-        if (failures.isNotEmpty()) {
-            // Optional: add a single-line summary to your *log* builder here if you want:
-            // builder.appendLine("|      ✘ ${failures.size} verification(s) failed")
-
-            // Build *only* the detailed items. Do NOT repeat the "N verifications failed:" header
-            val details = failures.joinToString("\n\n") { vr ->
-                val desc = vr.expectation.description.ifBlank { "unnamed verification" }
-                val msg = vr.error?.message?.trim().orEmpty()
-                buildString {
-                    appendLine("$desc:")
-                    if (msg.isNotEmpty()) appendLine(msg)
-                }.trimEnd()
-            }
-
-//            println(details)
-
-            // Throw with detailed items only; the runner will prefix with "AssertionError: ..."
-            failures.forEach { throw it.error!! }
-        }
-
+        expectationResults
+            .filter { it.error != null }
+            .forEach { throw it.error!! }
 
         return result
     }

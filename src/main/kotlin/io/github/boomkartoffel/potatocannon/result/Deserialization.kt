@@ -8,6 +8,7 @@ import com.fasterxml.jackson.dataformat.xml.XmlMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultDeserializationModule
 
 import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObject
 import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
@@ -105,12 +106,15 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
     if (javaTime) builder.addModule(JavaTimeModule())
     if (caseInsensitive) builder.enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES)
     if (emptyStringAsNull) builder.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)
-    if (unknownEnumAsDefault) builder.enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE)
+    if (unknownEnumAsDefault) {
+        builder.enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE)
+        builder.addModule(EnumDefaultDeserializationModule)
+    }
 
     return builder.build()
 }
 
-internal class JsonDeserializer(val deserializationStrategies: List<DeserializationStrategy>) : Deserializer {
+internal class JsonDeserializer(deserializationStrategies: List<DeserializationStrategy>) : Deserializer {
     internal val mapper: ObjectMapper = buildMapper(deserializationStrategies, DeserializationFormat.JSON)
 
 
@@ -124,7 +128,7 @@ internal class JsonDeserializer(val deserializationStrategies: List<Deserializat
     }
 }
 
-internal class XmlDeserializer(val deserializationStrategies: List<DeserializationStrategy>) : Deserializer {
+internal class XmlDeserializer(deserializationStrategies: List<DeserializationStrategy>) : Deserializer {
     val mapper: ObjectMapper = buildMapper(deserializationStrategies, DeserializationFormat.XML)
 
 

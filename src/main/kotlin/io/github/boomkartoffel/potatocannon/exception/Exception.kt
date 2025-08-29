@@ -11,7 +11,7 @@ class ResponseBodyMissingException
 class DeserializationFailureException(
     className: String,
     cause: Throwable
-) : PotatoCannonException("Failed to deserialize response body as $className", cause)
+) : PotatoCannonException("Failed to deserialize response body as $className\n${cause.message}", cause)
 
 class ExecutionFailureException(
     cause: Throwable? = null

@@ -46,25 +46,18 @@ class Result internal constructor(
     val queryParams: Map<String, List<String>>,
     val durationMillis: Long,
     //this is not a configuration, but a list of strategies that are necessary for deserialization, and it is not supposed to be accessed by the user
-    private val deserializationStrategies : List<DeserializationStrategy>,
+    private val deserializationStrategies: List<DeserializationStrategy>,
     val error: Throwable?
 ) {
 
-    fun responseText(charset: Charset): String? {
-        return try {
-            responseBody?.toString(charset)
-        } catch (_: Exception) {
-            null // invalid charset or malformed content
-        }
-    }
-
-    fun responseText(): String? {
-        return responseText(responseCharset())
-    }
+    fun responseText(charset: Charset) = responseBody?.toString(charset)
+    fun responseText() = responseText(responseCharset())
 
     fun <T> bodyAsObject(clazz: Class<T>): T = bodyAsObject(clazz, defaultFormat)
     fun <T> bodyAsObject(clazz: Class<T>, charset: Charset): T = bodyAsObject(clazz, defaultFormat, charset)
-    fun <T> bodyAsObject(clazz: Class<T>, format: DeserializationFormat): T = bodyAsObject(clazz, format, responseCharset())
+    fun <T> bodyAsObject(clazz: Class<T>, format: DeserializationFormat): T =
+        bodyAsObject(clazz, format, responseCharset())
+
     fun <T> bodyAsObject(clazz: Class<T>, deserializer: Deserializer): T =
         bodyAsObject(clazz, deserializer, responseCharset())
 
@@ -113,7 +106,8 @@ class Result internal constructor(
         return try {
             deserializer.deserializeList(text, clazz)
         } catch (e: Exception) {
-            throw DeserializationFailureException(clazz.name, e)        }
+            throw DeserializationFailureException(clazz.name, e)
+        }
     }
 
     private fun responseCharset(): Charset {

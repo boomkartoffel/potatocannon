@@ -115,23 +115,39 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
                 greenCheck
             }
 
-            val label = if (unnamed.size == 1) "1 unnamed checks" else "${unnamed.size} unnamed check"
-            builder.appendLine("|      $checkmark $label ($passed passed, $assertionFailed failed, $otherFailed other errors)")
+            val label = if (unnamed.size == 1) "1 unnamed check" else "${unnamed.size} unnamed checks"
+//            builder.appendLine("|      $checkmark $label ($passed passed, $assertionFailed failed, $otherFailed other errors)")
+            builder.appendLine("|      $checkmark $label ($passed $greenCheck | $assertionFailed $redCross | $otherFailed $exclamationSign)")
+
+            val errorDescriptions = unnamed
+                .filter { !it.isAssertionError && it.error != null }
+                .map {
+                    val err = it.error!!
+                    "${err::class.simpleName}: ${err.message}".prettifyIndented()
+                }
+
+            builder.appendLine(errorDescriptions.joinToString("\n|\n"))
         }
 
         // List named verifications with pass/fail marker
         named.forEachIndexed { idx, vr ->
             val desc = vr.expectation.description
+            var needsErrorDescription = false
 
             val checkmark = if (vr.isAssertionError) {
                 redCross
             } else if (vr.error != null) {
-                exclamationSign
+                exclamationSign.also { needsErrorDescription = true }
             } else {
                 greenCheck
             }
 
             builder.appendLine("|      $checkmark $desc")
+
+            if (needsErrorDescription) {
+                val err = vr.error!!
+                builder.appendLine("${err::class.simpleName}: ${err.message}".prettifyIndented())
+            }
 
         }
     }
@@ -173,26 +189,26 @@ private fun PotatoBody.prettifyIndented(): String {
     }
 }
 
-private fun String.prettifyIndented(): String {
+private fun String?.prettifyIndented(): String {
     val prefix = "|      "
 
     val prettyJson = prettifyJsonIfPossible()
     if (prettyJson != null) return prettyJson.prependEachLine(prefix)
 
-    return this.trimIndent().prependEachLine(prefix)
+    return (this ?: "null").trimIndent().prependEachLine(prefix)
 }
 
 private fun String.prependEachLine(prefix: String): String =
     this.lines().joinToString("\n") { "$prefix$it" }
 
 
-private fun String.prettifyJsonIfPossible(): String? {
+private fun String?.prettifyJsonIfPossible(): String? {
     return try {
         val jsonNode = ObjectMapper().readTree(this)
         ObjectMapper()
             .writerWithDefaultPrettyPrinter()
             .writeValueAsString(jsonNode)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 }
