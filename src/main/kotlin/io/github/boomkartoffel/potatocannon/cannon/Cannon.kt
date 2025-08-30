@@ -18,16 +18,19 @@ import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
+import java.net.ConnectException
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
+import java.nio.channels.ClosedChannelException
 import java.util.Collections
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 
 /**
@@ -113,23 +116,50 @@ class Cannon {
     }
 
     private fun fireParallel(potatoes: List<Potato>): List<Result> {
+        val maxConcurrent = 500
+
         val results = Collections.synchronizedList(mutableListOf<Result>())
-        val pool = Executors.newFixedThreadPool(500)
+//        val pool = Executors.newFixedThreadPool(500)
+
+        val start = System.currentTimeMillis()
+        fun deadlineExceeded() = (System.currentTimeMillis() - start) > 30_000L
+
+        val permits = Semaphore(maxConcurrent, true)
+        val pool: ExecutorService = ParallelExecutorService.taskExecutor()
 
         try {
             val futures = potatoes.map { potato ->
-                pool.submit<Result> {
-                    val result = fireOne(potato)
-                    results.add(result) // ensure 'results' is thread-safe!
-                    result
+                pool.submit {
+                    var attempt = 0
+                    while (true) {
+                        if (deadlineExceeded()) throw TimeoutException("Time scope for parallel execution exceeded")
+
+                        permits.acquire()
+                        var retryDelayMs: Long
+                        try {
+                            val r = fireOne(potato)
+                            results.add(r)
+                            return@submit
+                        } catch (t: Throwable) { // this actually doesnt trigger because the exception is caught in fireOne and returned as part of Result
+                            if (isClientConnectionFailure(t)) {
+                                retryDelayMs = backoff(attempt++)  // decide delay
+                            } else {
+                                throw t
+                            }
+                        } finally {
+                            permits.release()
+                        }
+
+                        sleep(retryDelayMs)
+                    }
                 }
             }
 
-            for (f in futures) {
+            futures.forEach { f ->
                 try {
                     f.get()
                 } catch (t: Throwable) {
-                    val cause = t.cause
+                    val cause = t.cause ?: t
                     when (cause) {
                         is PotatoCannonException -> throw cause
                         else -> throw ExecutionFailureException(cause)
@@ -138,22 +168,60 @@ class Cannon {
             }
         } finally {
             pool.shutdown()
-            pool.awaitTermination(1, TimeUnit.MINUTES)
+            pool.awaitTermination(5, TimeUnit.MINUTES)
         }
 
         return results.toList()
+
+//        try {
+//            val futures = potatoes.map { potato ->
+//                pool.submit<Result> {
+//                    val result = fireOne(potato)
+//                    results.add(result)
+//                    result
+//                }
+//            }
+//
+//            for (f in futures) {
+//                try {
+//                    f.get()
+//                } catch (t: Throwable) {
+//                    val cause = t.cause
+//                    when (cause) {
+//                        is PotatoCannonException -> throw cause
+//                        else -> throw ExecutionFailureException(cause)
+//                    }
+//                }
+//            }
+//        } finally {
+//            pool.shutdown()
+//            pool.awaitTermination(1, TimeUnit.MINUTES)
+//        }
+//
+//        return results.toList()
     }
 
-    /**
-     * Fires a single [Potato] request and returns the result.
-     *
-     * This method constructs the full URL, applies query parameters and headers,
-     * sends the request, and processes the response.
-     *
-     * @param potato The [Potato] to fire.
-     * @return A [Result] object containing the response details.
-     */
-    fun fireOne(potato: Potato): Result {
+    private fun backoff(attempt: Int): Long {
+        val steps = listOf(10L, 25L, 50L, 100L, 200L)
+        return if (attempt < steps.size) steps[attempt] else steps.last() * (attempt - steps.size + 2)
+    }
+
+    private fun isClientConnectionFailure(t: Throwable): Boolean {
+        val e = (t.cause ?: t)
+//        val msg = e.message?.lowercase() ?: ""
+        return e is ConnectException ||
+                e is ClosedChannelException
+    }
+
+    private fun sleep(ms: Long) {
+        try {
+            Thread.sleep(ms)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
+    private fun fireOne(potato: Potato): Result {
 
         val allQueryParams = mutableMapOf<String, List<String>>()
 

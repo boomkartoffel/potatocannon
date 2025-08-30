@@ -1,6 +1,9 @@
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
+
 plugins {
     kotlin("jvm") version "2.1.20"
     kotlin("plugin.serialization") version "2.1.20"
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
 group = "io.github.boomkartoffel"
@@ -44,6 +47,38 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
 }
+
 kotlin {
     jvmToolchain(21)
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11) // classfile target
+        freeCompilerArgs.add("-Xjdk-release=11")
+    }
+}
+
+// (Optional, harmless in Kotlin-only projects)
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+extensions.configure<MavenPublishBaseExtension> {
+    publishToMavenCentral(automaticRelease = true)
+    signAllPublications()
+    coordinates("io.github.boomkartoffel", "PotatoCannon", version.toString())
+    pom {
+        name.set("PotatoCannon")
+        description.set("A lightweight, expressive HTTP testing library for Java and Kotlin applications")
+        url.set("https://github.com/boomkartoffel/PotatoCannon")
+        licenses { license { name.set("Apache-2.0"); url.set("https://www.apache.org/licenses-2.0.txt") } }
+        developers { developer { id.set("boomkartoffel"); name.set("Claus Hinrich Hermanussen") } }
+        scm {
+            url.set("https://github.com/boomkartoffel/PotatoCannon")
+            connection.set("scm:git:https://github.com/boomkartoffel/PotatoCannon.git")
+            developerConnection.set("scm:git:ssh://git@github.com/boomkartoffel/PotatoCannon.git")
+        }
+    }
 }

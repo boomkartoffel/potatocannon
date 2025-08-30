@@ -46,10 +46,6 @@ object TestBackend {
                 json()
             }
             routing {
-                get("/health") {
-                    call.respondText("OK")
-                }
-
                 get("/no-body") {
                     call.respond(HttpStatusCode.OK)
                 }
@@ -297,39 +293,9 @@ object TestBackend {
         }
 
         server?.start(wait = false)
-
-        waitForPort("127.0.0.1", port)
-        waitForReady("127.0.0.1:$port")
     }
 
-    private fun waitForPort(host: String, port: Int, timeoutMs: Long = 5_000) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                java.net.Socket().use { s ->
-                    s.connect(java.net.InetSocketAddress(host, port), /*connectTimeoutMs*/ 150)
-                    return
-                }
-            } catch (_: Exception) {
-                Thread.sleep(25)
-            }
-        }
-        error("Server didn’t open $host:$port within ${timeoutMs}ms")
-    }
 
-    private fun waitForReady(baseUrl: String, timeoutMs: Long = 5_000) {
-        val http = HttpClient.newHttpClient()
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                val r = java.net.http.HttpRequest.newBuilder(URI.create("http://$baseUrl/health")).GET().build()
-                val s = http.send(r, java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode()
-                if (s == 200) return
-            } catch (_: Exception) { /* ignore */ }
-            Thread.sleep(25)
-        }
-        error("Server not ready at $baseUrl within ${timeoutMs}ms")
-    }
 
     fun stop() {
         server?.stop(

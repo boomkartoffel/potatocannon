@@ -143,11 +143,6 @@ class PotatoCannonTest {
         baseCannon = Cannon(
             baseUrl = "http://127.0.0.1:$port",
         )
-
-        val warmUpPotato = Potato(
-            method = HttpMethod.GET, path = "/test", is200Expectation, isHelloResponseExpectation
-        )
-        baseCannon.fire(warmUpPotato)
     }
 
     @AfterAll
@@ -213,6 +208,22 @@ class PotatoCannonTest {
         )
 
         baseCannon.fire(nonExistingBase)
+    }
+
+    @Test
+    fun `Requests to non-existing server in parallel will have http request errors`() {
+
+        val nonExistingBase = Potato(
+            method = HttpMethod.GET, path = "/test", Check {
+                it.statusCode shouldBe -1
+                it.error shouldNotBe null
+                it.error.shouldBeInstanceOf<java.net.ConnectException>()
+            }, OverrideBaseUrl("http://127.0.0.1:9999")
+        )
+
+        baseCannon
+            .withFireMode(FireMode.PARALLEL)
+            .fire(nonExistingBase, nonExistingBase)
     }
 
     @Test
@@ -912,11 +923,11 @@ class PotatoCannonTest {
             method = HttpMethod.POST, path = "/first-call", is200Expectation
         )
 
-        val result = baseCannon.fireOne(firstPotato)
+        val result = baseCannon.fire(firstPotato)
 
         baseCannon.fire(
             firstPotato.withPath("/second-call").addConfiguration(
-                QueryParam("number", result.responseText() ?: "0")
+                QueryParam("number", result[0].responseText() ?: "0")
             )
         )
 
