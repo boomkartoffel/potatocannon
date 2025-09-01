@@ -52,6 +52,7 @@ internal class ExpectationResult(val expectation: Expectation, val error: Throwa
  * ```
  *
  * You can also wrap this with a description using [withDescription].
+ *
  * @since 0.1.0
  */
 fun interface Check : PotatoConfiguration, CannonConfiguration {
@@ -69,7 +70,7 @@ fun interface Check : PotatoConfiguration, CannonConfiguration {
  * val isOkExpectation = isOk.withDescription("Should return 200 OK")
  * ```
  *
- * @param description human-readable description shown in logs or test reports
+ * @param description human-readable description shown in the Potato Dispatch log
  * @return an [Expectation] combining this check with the description
  * @since 0.1.0
  */

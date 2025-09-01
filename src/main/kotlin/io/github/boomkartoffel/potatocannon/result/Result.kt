@@ -29,11 +29,12 @@ class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
  * @property potato The original [Potato] that was fired.
  * @property fullUrl The full URL used in the request, including query parameters.
  * @property statusCode The HTTP response status code (e.g., 200, 404).
- * @property responseBody The raw response body as a [ByteArray], or null if the request failed or had no body.
+ * @property responseBody The raw response body as a [ByteArray], or null if the request had no body.
  * @property requestHeaders The headers sent with the request.
  * @property responseHeaders The headers received in the response.
  * @property queryParams The query parameters used in the request.
  * @property durationMillis Total time in milliseconds taken to execute the request.
+ * @property attempts The number of attempts it took to successfully send the request.
  * @since 0.1.0
  */
 class Result internal constructor(
@@ -47,7 +48,6 @@ class Result internal constructor(
     val durationMillis: Long,
     //this is not a configuration, but a list of strategies that are necessary for deserialization, and it is not supposed to be accessed by the user
     internal val deserializationStrategies: List<DeserializationStrategy>,
-//    val error: Throwable?,
     val attempts: Int
 ) {
 

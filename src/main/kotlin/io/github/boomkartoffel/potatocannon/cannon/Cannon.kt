@@ -96,7 +96,7 @@ class Cannon {
      * If no [FireMode] is specified, the default is [FireMode.PARALLEL].
      *
      * @param potatoes The HTTP requests to fire.
-     * @return A list of `Result` objects representing the responses.
+     * @return A list of [Result] objects representing the responses.
      * @since 0.1.0
      */
     fun fire(vararg potatoes: Potato): List<Result> {
@@ -104,12 +104,12 @@ class Cannon {
     }
 
     /**
-     * Fires a list of [Potato] requests according to the configured `FireMode`.
+     * Fires a list of [Potato] requests according to the configured [FireMode].
      *
-     * If no `FireMode` is specified, the default is `PARALLEL`.
+     * If no [FireMode] is specified, the default is [FireMode.PARALLEL].
      *
      * @param potatoes The list of HTTP requests to fire.
-     * @return A list of `Result` objects representing the responses.
+     * @return A list of [Result] objects representing the responses.
      * @since 0.1.0
      */
     fun fire(potatoes: List<Potato>): List<Result> {
