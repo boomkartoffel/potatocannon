@@ -34,6 +34,7 @@ class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
  * @property responseHeaders The headers received in the response.
  * @property queryParams The query parameters used in the request.
  * @property durationMillis Total time in milliseconds taken to execute the request.
+ * @since 0.1.0
  */
 class Result internal constructor(
     val potato: Potato,
@@ -133,17 +134,3 @@ private fun extractCharset(contentType: String): Charset? {
             }
         }
 }
-
-//internal fun Result.withAttempts(attempts: Int) = Result(
-//    potato,
-//    fullUrl,
-//    statusCode,
-//    responseBody,
-//    requestHeaders,
-//    responseHeaders,
-//    queryParams,
-//    durationMillis,
-//    deserializationStrategies,
-////    error,
-//    attempts
-//)

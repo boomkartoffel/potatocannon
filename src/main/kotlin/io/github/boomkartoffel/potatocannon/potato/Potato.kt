@@ -33,6 +33,7 @@ enum class HttpMethod {
  * @property path The relative path of the request (e.g. "/users").
  * @property body Optional request body, either textual or binary.
  * @property configuration Optional list of [PotatoConfiguration] items like headers, query parameters, and verifications of the request.
+ * @since 0.1.0
  */
 class Potato(
     val method: HttpMethod,

@@ -8,6 +8,8 @@ package io.github.boomkartoffel.potatocannon.strategy
  * or simultaneously (in parallel). If multiple FireModes are specified, then the last provided one will be used.
  *
  * The default behavior is to fire all requests in parallel.
+ *
+ * @since 0.1.0
  */
 enum class FireMode : CannonConfiguration {
 

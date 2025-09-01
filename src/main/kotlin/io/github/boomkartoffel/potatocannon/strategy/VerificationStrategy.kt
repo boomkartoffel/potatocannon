@@ -11,6 +11,7 @@ import io.github.boomkartoffel.potatocannon.result.Result
  *
  * @param check the condition that should be met by the [Result].
  * @param description an optional description of the verification. This text will be shown in the log when the verification is executed.
+ * @since 0.1.0
  */
 class Expectation(val description: String, private val check: Check) : PotatoConfiguration,
     CannonConfiguration {
@@ -51,6 +52,7 @@ internal class ExpectationResult(val expectation: Expectation, val error: Throwa
  * ```
  *
  * You can also wrap this with a description using [withDescription].
+ * @since 0.1.0
  */
 fun interface Check : PotatoConfiguration, CannonConfiguration {
     fun check(result: Result)
@@ -69,5 +71,6 @@ fun interface Check : PotatoConfiguration, CannonConfiguration {
  *
  * @param description human-readable description shown in logs or test reports
  * @return an [Expectation] combining this check with the description
+ * @since 0.1.0
  */
 fun Check.withDescription(description: String) = Expectation(description, this)

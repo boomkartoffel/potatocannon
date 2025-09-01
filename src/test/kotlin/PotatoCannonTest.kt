@@ -31,7 +31,7 @@ import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
 import io.github.boomkartoffel.potatocannon.strategy.JavaTimeSupport
 import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
-import io.github.boomkartoffel.potatocannon.strategy.MaxRetry
+import io.github.boomkartoffel.potatocannon.strategy.RetryLimit
 import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
 import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout
 import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
@@ -209,7 +209,7 @@ class PotatoCannonTest {
 
         shouldThrow<RequestSendingException> {
             baseCannon
-                .addConfiguration(MaxRetry(5))
+                .addConfiguration(RetryLimit(5))
                 .fire(nonExistingBase)
         }.message shouldBe "Failed to send request within 6 attempts"
 
@@ -220,7 +220,7 @@ class PotatoCannonTest {
 
         val timeoutPotato = Potato(
             method = HttpMethod.POST, path = "/timeout",
-            MaxRetry(5),
+            RetryLimit(5),
             RequestTimeout.of(100)
         )
 
@@ -239,7 +239,7 @@ class PotatoCannonTest {
 
         val timeoutPotato1 = Potato(
             method = HttpMethod.POST, path = "/timeout",
-            MaxRetry(5),
+            RetryLimit(5),
             RequestTimeout.of(300),
             QueryParam("id", "Test1"),
             QueryParam("returnOkAfter", "4"),
@@ -248,7 +248,7 @@ class PotatoCannonTest {
 
         val timeoutPotato2 = Potato(
             method = HttpMethod.POST, path = "/timeout",
-            MaxRetry(5),
+            RetryLimit(5),
             RequestTimeout.of(150),
             QueryParam("id", "Test2"),
             QueryParam("returnOkAfter", "4"),
@@ -270,7 +270,7 @@ class PotatoCannonTest {
 
         val timeoutPotato = Potato(
             method = HttpMethod.POST, path = "/timeout",
-            MaxRetry(11),
+            RetryLimit(11),
             RequestTimeout.of(100),
             QueryParam("id", "RetryTest"),
             QueryParam("returnOkAfter", "12"),
@@ -306,7 +306,7 @@ class PotatoCannonTest {
 
         val timeoutPotato1 = Potato(
             method = HttpMethod.POST, path = "/timeout",
-            MaxRetry(5),
+            RetryLimit(5),
             RequestTimeout.of(300),
             QueryParam("id", "Test1Parallel"),
             QueryParam("returnOkAfter", "4"),
@@ -315,7 +315,7 @@ class PotatoCannonTest {
 
         val timeoutPotato2 = Potato(
             method = HttpMethod.POST, path = "/timeout",
-            MaxRetry(5),
+            RetryLimit(5),
             RequestTimeout.of(150),
             QueryParam("id", "Test2Parallel"),
             QueryParam("returnOkAfter", "4"),

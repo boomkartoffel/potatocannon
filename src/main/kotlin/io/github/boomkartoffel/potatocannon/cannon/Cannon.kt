@@ -21,7 +21,7 @@ import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
 import io.github.boomkartoffel.potatocannon.strategy.ConcurrencyLimit
 import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
-import io.github.boomkartoffel.potatocannon.strategy.MaxRetry
+import io.github.boomkartoffel.potatocannon.strategy.RetryLimit
 import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout
 import java.net.URI
 import java.net.URLEncoder
@@ -45,6 +45,7 @@ import java.util.concurrent.TimeUnit
  *
  * @property baseUrl The root URL used to resolve all relative request paths.
  * @property configuration A list of reusable strategies or behaviors that affect request firing.
+ * @since 0.1.0
  */
 class Cannon {
     private val baseUrl: String
@@ -72,6 +73,7 @@ class Cannon {
      *
      * @param additionalConfiguration The new configuration strategies to add.
      * @return A new `Cannon` with extended configuration.
+     * @since 0.1.0
      */
     fun addConfiguration(vararg additionalConfiguration: CannonConfiguration): Cannon =
         this.addConfiguration(additionalConfiguration.toList())
@@ -83,6 +85,7 @@ class Cannon {
      *
      * @param additionalConfiguration The new configuration strategies to add.
      * @return A new `Cannon` with extended configuration.
+     * @since 0.1.0
      */
     fun addConfiguration(additionalConfiguration: List<CannonConfiguration>): Cannon =
         Cannon(baseUrl, configuration + additionalConfiguration)
@@ -94,6 +97,7 @@ class Cannon {
      *
      * @param potatoes The HTTP requests to fire.
      * @return A list of `Result` objects representing the responses.
+     * @since 0.1.0
      */
     fun fire(vararg potatoes: Potato): List<Result> {
         return fire(potatoes.toList())
@@ -106,6 +110,7 @@ class Cannon {
      *
      * @param potatoes The list of HTTP requests to fire.
      * @return A list of `Result` objects representing the responses.
+     * @since 0.1.0
      */
     fun fire(potatoes: List<Potato>): List<Result> {
         val mode = configuration
@@ -133,10 +138,10 @@ class Cannon {
                     var attempt = 0
                     var isPermitAcquired = false
 
-                    val maxRetry = (configuration + potato.configuration)
-                        .filterIsInstance<MaxRetry>()
+                    val retryLimit = (configuration + potato.configuration)
+                        .filterIsInstance<RetryLimit>()
                         .lastOrNull()
-                        ?.count ?: MaxRetry.DEFAULT
+                        ?.count ?: RetryLimit.DEFAULT
 
                     try {
                         while (true) {
@@ -157,7 +162,7 @@ class Cannon {
                                 results.add(r)
                                 return@submit
                             } catch (t: Throwable) {
-                                if (t is RequestSendingException && attempt < maxRetry) {
+                                if (t is RequestSendingException && attempt < retryLimit) {
                                     retryDelayMs = backoff(attempt++) // compute delay
                                 } else {
                                     throw t

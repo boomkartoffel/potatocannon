@@ -12,6 +12,8 @@ package io.github.boomkartoffel.potatocannon.strategy
  * - [Expectation]
  *
  * For configurations that can only be applied once (e.g., logging, auth headers), the last one will be applied, i.e. PotatoConfiguration will override CannonConfiguration.
+
+ * @since 0.1.0
  */
 sealed interface PotatoConfiguration
 
@@ -28,5 +30,6 @@ sealed interface PotatoConfiguration
  *
  * For configurations that can only be applied once (e.g., logging, auth headers), the last one will be applied, i.e. PotatoConfiguration will override CannonConfiguration.
  *
+ * @since 0.1.0
  */
 sealed interface CannonConfiguration

@@ -38,6 +38,7 @@ interface Deserializer {
      * @param data the raw serialized input (e.g. JSON string)
      * @param targetClass the class to deserialize into
      * @return the deserialized object of type [T]
+     * @since 0.1.0
      */
     fun <T> deserializeObject(data: String, targetClass: Class<T>): T
 
@@ -48,6 +49,7 @@ interface Deserializer {
      * @param data the raw serialized input (e.g. JSON array string)
      * @param targetClass the class to deserialize each element into
      * @return a list of deserialized objects of type [T]
+     * @since 0.1.0
      */
     fun <T> deserializeList(data: String, targetClass: Class<T>): List<T>
 }
@@ -149,6 +151,7 @@ internal class XmlDeserializer(deserializationStrategies: List<DeserializationSt
  *
  * @see io.github.boomkartoffel.potatocannon.result.Result.bodyAsObject
  * @see io.github.boomkartoffel.potatocannon.result.Result.bodyAsList
+ * @since 0.1.0
  */
 enum class DeserializationFormat {
     /**

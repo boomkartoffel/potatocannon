@@ -8,6 +8,8 @@ import java.util.Base64
  * Implementing classes or enums define how headers are added or modified
  * before a Potato (request) is fired. These strategies can be applied
  * at the Potato or Cannon level.
+ *
+ * @since 0.1.0
  */
 sealed interface HeaderStrategy : CannonConfiguration, PotatoConfiguration {
     fun apply(headers: MutableMap<String, List<String>>)
@@ -18,6 +20,8 @@ sealed interface HeaderStrategy : CannonConfiguration, PotatoConfiguration {
  *
  * When applied, sets the `Content-Type` header to the associated MIME type of the request body.
  * There can be only one `Content-Type` header per request, so this strategy will overwrite any existing `Content-Type` header.
+ *
+ * @since 0.1.0
  */
 enum class ContentType(val mime: String) : HeaderStrategy {
     JSON("application/json"),
@@ -49,6 +53,8 @@ enum class ContentType(val mime: String) : HeaderStrategy {
  *
  * @property username The username for Basic Auth.
  * @property password The password for Basic Auth.
+ *
+ * @since 0.1.0
  */
 class BasicAuth(val username: String, val password: String) : HeaderStrategy {
     override fun apply(headers: MutableMap<String, List<String>>) {
@@ -68,6 +74,8 @@ class BasicAuth(val username: String, val password: String) : HeaderStrategy {
  * There can be only one `Authorization` header per request, so this strategy will overwrite any existing `Authorization` header.
  *
  * @property token The Bearer token to set in the `Authorization` header.
+ *
+ * @since 0.1.0
  */
 class BearerAuth(val token: String) : HeaderStrategy {
     override fun apply(headers: MutableMap<String, List<String>>) {
@@ -80,6 +88,8 @@ class BearerAuth(val token: String) : HeaderStrategy {
  *
  * - `APPEND`: Adds the new value to the existing values for the header key.
  * - `OVERWRITE`: Replaces the existing values with the new value for the header key.
+ *
+ * @since 0.1.0
  */
 enum class HeaderUpdateStrategy {
     APPEND,
@@ -102,6 +112,7 @@ enum class HeaderUpdateStrategy {
  * @property key The header key to set.
  * @property value The header value to set.
  * @property strategy The strategy to use when the header already exists. Defaults to [HeaderUpdateStrategy.OVERWRITE].
+ * @since 0.1.0
  */
 class CustomHeader(val key: String, val value: String, val strategy: HeaderUpdateStrategy) : HeaderStrategy {
 
@@ -133,6 +144,7 @@ class CustomHeader(val key: String, val value: String, val strategy: HeaderUpdat
  * There can be only one `Cookie` header per request, so this strategy will overwrite any existing `Cookie` header.
  *
  * @property cookie The cookie string to set in the `Cookie` header.
+ * @since 0.1.0
  */
 class CookieHeader(val cookie: String) : HeaderStrategy {
     override fun apply(headers: MutableMap<String, List<String>>) {

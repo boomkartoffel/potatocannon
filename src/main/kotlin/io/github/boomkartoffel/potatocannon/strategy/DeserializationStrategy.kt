@@ -12,6 +12,8 @@ import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
  * - [UnknownPropertyMode] → [UnknownPropertyMode.IGNORE]
  * - [NullCoercion] → [NullCoercion.STRICT]
  * - All other feature toggles → disabled
+ *
+ * @since 0.1.0
  */
 sealed interface DeserializationStrategy : CannonConfiguration, PotatoConfiguration
 
@@ -21,6 +23,8 @@ sealed interface DeserializationStrategy : CannonConfiguration, PotatoConfigurat
  * - [IGNORE] (default): Extra fields in the JSON that are not present in the target
  *   data class will be silently ignored.
  * - [FAIL]: Deserialization fails with an exception if an unknown property is encountered.
+ *
+ * @since 0.1.0
  */
 enum class UnknownPropertyMode : DeserializationStrategy {
     IGNORE,
@@ -38,6 +42,8 @@ enum class UnknownPropertyMode : DeserializationStrategy {
  *   - `null` map → `emptyMap`
  *   - `null` property with a default value in the data class → default is applied
  *   - `null` property without a default value → deserialization fails
+ *
+ * @since 0.1.0
  */
 enum class NullCoercion : DeserializationStrategy {
     STRICT,
@@ -49,6 +55,8 @@ enum class NullCoercion : DeserializationStrategy {
  * such as `LocalDate`, `Instant`, and `ZonedDateTime`.
  *
  * Disabled by default.
+ *
+ * @since 0.1.0
  */
 object JavaTimeSupport : DeserializationStrategy
 
@@ -59,6 +67,8 @@ object JavaTimeSupport : DeserializationStrategy
  * the `userName` property in a Kotlin data class.
  *
  * Disabled by default.
+ *
+ * @since 0.1.0
  */
 object CaseInsensitiveProperties : DeserializationStrategy
 
@@ -69,6 +79,8 @@ object CaseInsensitiveProperties : DeserializationStrategy
  * Example: `{"user": ""}` → `user = null`.
  *
  * Disabled by default.
+ *
+ * @since 0.1.0
  */
 object AcceptEmptyStringAsNullObject : DeserializationStrategy
 
@@ -80,5 +92,7 @@ object AcceptEmptyStringAsNullObject : DeserializationStrategy
  * [EnumDefaultValue]
  *
  * Disabled by default.
+ *
+ * @since 0.1.0
  */
 object UnknownEnumAsDefault : DeserializationStrategy

@@ -28,6 +28,8 @@ import com.fasterxml.jackson.databind.introspect.AnnotatedClass
  *
  * This annotation is recognized only when the
  * [UnknownEnumAsDefault] deserialization strategy is enabled.
+ *
+ * @since 0.1.0
  */
 @Target(AnnotationTarget.FIELD)
 @Retention(AnnotationRetention.RUNTIME)

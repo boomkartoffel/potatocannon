@@ -7,6 +7,8 @@ package io.github.boomkartoffel.potatocannon.strategy
  * When multiple logging configurations are applied, the last one takes precedence.
  *
  * The default logging level is [FULL], which logs all request and response details.
+ *
+ * @since 0.1.0
  */
 enum class Logging : CannonConfiguration, PotatoConfiguration {
     /**

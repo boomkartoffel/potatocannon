@@ -8,6 +8,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  *
  * @param key the name of the query parameter.
  * @param value the value associated with the key.
+ * @since 0.1.0
  */
 class QueryParam(val key: String, val value: String) : PotatoConfiguration, CannonConfiguration {
     fun apply(queryParams: MutableMap<String, List<String>>) {

@@ -52,7 +52,7 @@ value class ConcurrencyLimit(val value: Int) : CannonConfiguration {
  * @since 0.1.0
  */
 @JvmInline
-value class MaxRetry(val count: Int) : CannonConfiguration, PotatoConfiguration {
+value class RetryLimit(val count: Int) : CannonConfiguration, PotatoConfiguration {
     init {
         require(count in MIN..MAX) { "Max retries must be between $MIN and $MAX, was $count" }
     }
