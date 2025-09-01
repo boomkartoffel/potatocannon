@@ -79,11 +79,21 @@ extensions.configure<MavenPublishBaseExtension> {
                 url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
             }
         }
-        developers { developer { id.set("boomkartoffel"); name.set("Claus Hinrich Hermanussen") } }
+        developers {
+            developer {
+                id.set("boomkartoffel")
+                name.set("Claus Hinrich Hermanussen")
+            }
+        }
         scm {
             url.set("https://github.com/boomkartoffel/PotatoCannon")
             connection.set("scm:git:https://github.com/boomkartoffel/PotatoCannon.git")
             developerConnection.set("scm:git:ssh://git@github.com/boomkartoffel/PotatoCannon.git")
         }
+        issueManagement {
+            system.set("GitHub Issues")
+            url.set("https://github.com/boomkartoffel/PotatoCannon/issues")
+        }
+        inceptionYear.set("2025")
     }
 }
