@@ -73,7 +73,12 @@ extensions.configure<MavenPublishBaseExtension> {
         name.set("PotatoCannon")
         description.set("A lightweight, expressive HTTP testing library for Java and Kotlin applications")
         url.set("https://github.com/boomkartoffel/PotatoCannon")
-        licenses { license { name.set("Apache-2.0"); url.set("https://www.apache.org/licenses-2.0.txt") } }
+        licenses {
+            license {
+                name.set("Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+            }
+        }
         developers { developer { id.set("boomkartoffel"); name.set("Claus Hinrich Hermanussen") } }
         scm {
             url.set("https://github.com/boomkartoffel/PotatoCannon")
