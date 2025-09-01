@@ -73,6 +73,18 @@ object JavaTimeSupport : DeserializationStrategy
 object CaseInsensitiveProperties : DeserializationStrategy
 
 /**
+ * Makes enum value matching case-insensitive.
+ *
+ * When enabled, names of enum constants are matched ignoring case. For example:
+ * `"active"`, `"Active"`, or `"ACTIVE"` → `Status.ACTIVE`.
+ *
+ * Disabled by default.
+ *
+ * @since 0.1.0
+ */
+object CaseInsensitiveEnums : DeserializationStrategy
+
+/**
  * Allows empty strings (`""`) in the JSON payload to be treated as `null`
  * for object values.
  *

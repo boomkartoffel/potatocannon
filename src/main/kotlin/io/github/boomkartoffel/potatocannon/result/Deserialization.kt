@@ -11,6 +11,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultDeserializationModule
 
 import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObject
+import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveEnums
 import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
 import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
 import io.github.boomkartoffel.potatocannon.strategy.JavaTimeSupport
@@ -63,7 +64,8 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
     var nullCoercion: NullCoercion = NullCoercion.STRICT
     var unknownProps: UnknownPropertyMode = UnknownPropertyMode.IGNORE
     var javaTime = false
-    var caseInsensitive = false
+    var caseInsensitiveProperties = false
+    var caseInsensitiveEnums = false
     var emptyStringAsNull = false
     var unknownEnumAsDefault = false
 
@@ -72,9 +74,10 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
             is NullCoercion -> nullCoercion = s
             is UnknownPropertyMode -> unknownProps = s
             JavaTimeSupport -> javaTime = true
-            CaseInsensitiveProperties -> caseInsensitive = true
+            CaseInsensitiveProperties -> caseInsensitiveProperties = true
             AcceptEmptyStringAsNullObject -> emptyStringAsNull = true
             UnknownEnumAsDefault -> unknownEnumAsDefault = true
+            CaseInsensitiveEnums -> caseInsensitiveEnums = true
         }
     }
 
@@ -106,7 +109,8 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
     }
 
     if (javaTime) builder.addModule(JavaTimeModule())
-    if (caseInsensitive) builder.enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES)
+    if (caseInsensitiveProperties) builder.enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES)
+    if (caseInsensitiveEnums) builder.enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS)
     if (emptyStringAsNull) builder.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)
     if (unknownEnumAsDefault) {
         builder.enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE)

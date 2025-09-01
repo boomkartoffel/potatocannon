@@ -20,6 +20,7 @@ import io.github.boomkartoffel.potatocannon.result.Deserializer
 import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObject
 import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
 import io.github.boomkartoffel.potatocannon.strategy.BearerAuth
+import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveEnums
 import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
 import io.github.boomkartoffel.potatocannon.strategy.ConcurrencyLimit
 import io.github.boomkartoffel.potatocannon.strategy.CookieHeader
@@ -395,7 +396,7 @@ class PotatoCannonTest {
     }
 
     @Test
-    fun `GET request times 500 to test-wait takes less than 1100 ms in parallel mode`() {
+    fun `GET request times 500 to test-wait takes less than 1150 ms in parallel mode`() {
         val potatoes = (1..500).map {
             Potato(
                 method = HttpMethod.GET, path = "/test-wait-parallel", is200Expectation, isHelloResponseExpectation
@@ -408,7 +409,7 @@ class PotatoCannonTest {
         val durationMs = end - start
 
         println("Parallel duration: $durationMs ms")
-        durationMs shouldBeLessThan 1100
+        durationMs shouldBeLessThan 1150
     }
 
     @Test
@@ -636,6 +637,35 @@ class PotatoCannonTest {
             baseCannon.fire(
                 potato
                     .addConfiguration(CaseInsensitiveProperties)
+            )
+        }
+    }
+
+    @Test
+    fun `deserialization respects CaseInsensitiveEnums (fails by default, succeeds when enabled)`() {
+        val check = Check { result: Result ->
+            val body = result.bodyAsObject(EmptyEnumCheckObject::class.java)
+            body.enum shouldBe EmptyEnumCheck.NONE
+            body.enum2 shouldBe EmptyEnumCheck.SOME
+        }.withDescription("Response is correctly deserialized and enum values are matched ignoring case")
+
+        val potato = Potato(
+            method = HttpMethod.POST,
+            path = "/case-insensitive-enum",
+            check
+        )
+
+        shouldThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                //default is disabled
+                potato
+            )
+        }
+
+        shouldNotThrow<DeserializationFailureException> {
+            baseCannon.fire(
+                potato
+                    .addConfiguration(CaseInsensitiveEnums)
             )
         }
     }

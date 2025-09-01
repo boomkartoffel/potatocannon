@@ -148,6 +148,17 @@ object TestBackend {
                     }
                 }
 
+                post("/case-insensitive-enum") {
+                    val json = """
+                            {
+                                "enum": "NoNe",
+                                "enum2": "some"
+                            }
+                        """.trimIndent()
+                    call.respondText(json, ContentType.Application.Json)
+
+                }
+
 
                 post("/create-user-list") {
                     val user = User(1, "Max Muster", "max@muster.com")
