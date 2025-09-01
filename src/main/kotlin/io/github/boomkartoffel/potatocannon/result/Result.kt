@@ -34,7 +34,6 @@ class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
  * @property responseHeaders The headers received in the response.
  * @property queryParams The query parameters used in the request.
  * @property durationMillis Total time in milliseconds taken to execute the request.
- * @property error Any exception thrown during the request, or null if successful.
  */
 class Result internal constructor(
     val potato: Potato,
@@ -46,8 +45,9 @@ class Result internal constructor(
     val queryParams: Map<String, List<String>>,
     val durationMillis: Long,
     //this is not a configuration, but a list of strategies that are necessary for deserialization, and it is not supposed to be accessed by the user
-    private val deserializationStrategies: List<DeserializationStrategy>,
-    val error: Throwable?
+    internal val deserializationStrategies: List<DeserializationStrategy>,
+//    val error: Throwable?,
+    val attempts: Int
 ) {
 
     fun responseText(charset: Charset) = responseBody?.toString(charset)
@@ -133,3 +133,17 @@ private fun extractCharset(contentType: String): Charset? {
             }
         }
 }
+
+//internal fun Result.withAttempts(attempts: Int) = Result(
+//    potato,
+//    fullUrl,
+//    statusCode,
+//    responseBody,
+//    requestHeaders,
+//    responseHeaders,
+//    queryParams,
+//    durationMillis,
+//    deserializationStrategies,
+////    error,
+//    attempts
+//)

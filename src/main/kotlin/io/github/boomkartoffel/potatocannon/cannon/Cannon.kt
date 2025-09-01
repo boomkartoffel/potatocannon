@@ -2,6 +2,7 @@ package io.github.boomkartoffel.potatocannon.cannon
 
 import io.github.boomkartoffel.potatocannon.exception.ExecutionFailureException
 import io.github.boomkartoffel.potatocannon.exception.PotatoCannonException
+import io.github.boomkartoffel.potatocannon.exception.RequestSendingException
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
@@ -18,19 +19,21 @@ import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
-import java.net.ConnectException
+import io.github.boomkartoffel.potatocannon.strategy.ConcurrencyLimit
+import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
+import io.github.boomkartoffel.potatocannon.strategy.MaxRetry
+import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
-import java.nio.channels.ClosedChannelException
+import java.time.Duration
 import java.util.Collections
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 
 
 /**
@@ -109,20 +112,17 @@ class Cannon {
             .filterIsInstance<FireMode>()
             .lastOrNull() ?: FireMode.PARALLEL
 
-        return when (mode) {
-            FireMode.SEQUENTIAL -> potatoes.map { fireOne(it) }
-            FireMode.PARALLEL -> fireParallel(potatoes)
-        }
-    }
+        val isSequentialFiring = (mode == FireMode.SEQUENTIAL)
+        val isParallelFiring = !isSequentialFiring
 
-    private fun fireParallel(potatoes: List<Potato>): List<Result> {
-        val maxConcurrent = 500
+        var maxConcurrent = configuration
+            .filterIsInstance<ConcurrencyLimit>()
+            .lastOrNull()
+            ?.value ?: ConcurrencyLimit.DEFAULT
+
+        if (isSequentialFiring) maxConcurrent = 1
 
         val results = Collections.synchronizedList(mutableListOf<Result>())
-//        val pool = Executors.newFixedThreadPool(500)
-
-        val start = System.currentTimeMillis()
-        fun deadlineExceeded() = (System.currentTimeMillis() - start) > 30_000L
 
         val permits = Semaphore(maxConcurrent, true)
         val pool: ExecutorService = ParallelExecutorService.taskExecutor()
@@ -131,26 +131,47 @@ class Cannon {
             val futures = potatoes.map { potato ->
                 pool.submit {
                     var attempt = 0
-                    while (true) {
-                        if (deadlineExceeded()) throw TimeoutException("Time scope for parallel execution exceeded")
+                    var isPermitAcquired = false
 
-                        permits.acquire()
-                        var retryDelayMs: Long
-                        try {
-                            val r = fireOne(potato)
-                            results.add(r)
-                            return@submit
-                        } catch (t: Throwable) { // this actually doesnt trigger because the exception is caught in fireOne and returned as part of Result
-                            if (isClientConnectionFailure(t)) {
-                                retryDelayMs = backoff(attempt++)  // decide delay
+                    val maxRetry = (configuration + potato.configuration)
+                        .filterIsInstance<MaxRetry>()
+                        .lastOrNull()
+                        ?.count ?: MaxRetry.DEFAULT
+
+                    try {
+                        while (true) {
+                            // acquire policy
+                            if (isSequentialFiring) {
+                                if (!isPermitAcquired) {
+                                    permits.acquire();
+                                    isPermitAcquired = true
+                                }
                             } else {
-                                throw t
+                                permits.acquire()
                             }
-                        } finally {
-                            permits.release()
-                        }
 
-                        sleep(retryDelayMs)
+                            var retryDelayMs: Long
+                            try {
+                                val r = fireOne(potato, attempt)
+
+                                results.add(r)
+                                return@submit
+                            } catch (t: Throwable) {
+                                if (t is RequestSendingException && attempt < maxRetry) {
+                                    retryDelayMs = backoff(attempt++) // compute delay
+                                } else {
+                                    throw t
+                                }
+                            } finally {
+                                // in PARALLEL release per attempt; in SEQUENTIAL keep the single permit
+                                if (isParallelFiring) permits.release()
+                            }
+
+                            // sleep after releasing (parallel) or while holding (sequential)
+                            sleep(retryDelayMs)
+                        }
+                    } finally {
+                        if (isSequentialFiring && isPermitAcquired) permits.release() // release the one held permit at the end
                     }
                 }
             }
@@ -172,45 +193,11 @@ class Cannon {
         }
 
         return results.toList()
-
-//        try {
-//            val futures = potatoes.map { potato ->
-//                pool.submit<Result> {
-//                    val result = fireOne(potato)
-//                    results.add(result)
-//                    result
-//                }
-//            }
-//
-//            for (f in futures) {
-//                try {
-//                    f.get()
-//                } catch (t: Throwable) {
-//                    val cause = t.cause
-//                    when (cause) {
-//                        is PotatoCannonException -> throw cause
-//                        else -> throw ExecutionFailureException(cause)
-//                    }
-//                }
-//            }
-//        } finally {
-//            pool.shutdown()
-//            pool.awaitTermination(1, TimeUnit.MINUTES)
-//        }
-//
-//        return results.toList()
     }
 
     private fun backoff(attempt: Int): Long {
         val steps = listOf(10L, 25L, 50L, 100L, 200L)
         return if (attempt < steps.size) steps[attempt] else steps.last() * (attempt - steps.size + 2)
-    }
-
-    private fun isClientConnectionFailure(t: Throwable): Boolean {
-        val e = (t.cause ?: t)
-//        val msg = e.message?.lowercase() ?: ""
-        return e is ConnectException ||
-                e is ClosedChannelException
     }
 
     private fun sleep(ms: Long) {
@@ -221,7 +208,7 @@ class Cannon {
         }
     }
 
-    private fun fireOne(potato: Potato): Result {
+    private fun fireOne(potato: Potato, currentAttempt: Int): Result {
 
         val allQueryParams = mutableMapOf<String, List<String>>()
 
@@ -270,12 +257,17 @@ class Cannon {
 
         }
 
+        val timeout = configs
+            .filterIsInstance<RequestTimeout>()
+            .lastOrNull()?.durationMillis ?: RequestTimeout.DEFAULT
+
+        builder.timeout(Duration.ofMillis(timeout))
+
         val request = when (val body = potato.body) {
             is TextBody -> builder.method(potato.method.name, BodyPublishers.ofString(body.content)).build()
             is BinaryBody -> builder.method(potato.method.name, BodyPublishers.ofByteArray(body.content)).build()
             null -> builder.method(potato.method.name, BodyPublishers.noBody()).build()
         }
-
 
         val baseLogging = configs
             .filterIsInstance<Logging>()
@@ -290,48 +282,38 @@ class Cannon {
             .filterIsInstance<Check>()
             .map { Expectation(it) }
 
+
         val start = System.currentTimeMillis()
+        val response = try {
+            client.send(request, BodyHandlers.ofByteArray())
+        } catch (t: Throwable) {
+            throw RequestSendingException(t, currentAttempt + 1)
+        }
+        val duration = System.currentTimeMillis() - start
 
         val deserializationStrategies = configs
             .filterIsInstance<DeserializationStrategy>()
 
-        val result = try {
-            val response = client.send(request, BodyHandlers.ofByteArray())
-            val duration = System.currentTimeMillis() - start
-
-            Result(
-                potato = potato,
-                fullUrl = fullUrl,
-                statusCode = response.statusCode(),
-                responseBody = response.body().takeIf { it.isNotEmpty() },
-                responseHeaders = Headers(response.headers().map().mapKeys { it.key.lowercase() }),
-                requestHeaders = Headers(request.headers().map().mapKeys { it.key.lowercase() }),
-                durationMillis = duration,
-                queryParams = allQueryParams,
-                deserializationStrategies = deserializationStrategies,
-                error = null
-            )
-
-        } catch (e: Exception) {
-            Result(
-                potato = potato,
-                fullUrl = fullUrl,
-                statusCode = -1,
-                responseBody = null,
-                responseHeaders = Headers(emptyMap()),
-                durationMillis = System.currentTimeMillis() - start,
-                requestHeaders = Headers(request.headers().map().mapKeys { it.key.lowercase() }),
-                queryParams = allQueryParams,
-                deserializationStrategies = deserializationStrategies,
-                error = e
-            )
-        }
-
+        val result = Result(
+            potato = potato,
+            fullUrl = fullUrl,
+            statusCode = response.statusCode(),
+            responseBody = response.body().takeIf { it.isNotEmpty() },
+            responseHeaders = Headers(response.headers().map().mapKeys { it.key.lowercase() }),
+            requestHeaders = Headers(request.headers().map().mapKeys { it.key.lowercase() }),
+            durationMillis = duration,
+            queryParams = allQueryParams,
+            deserializationStrategies = deserializationStrategies,
+            attempts = currentAttempt + 1
+        )
 
         val expectationResults = expectations
             .map { it.verify(result) }
 
-        result.log(baseLogging, logExcludes, expectationResults)
+        val logCommentary = configs
+            .filterIsInstance<LogCommentary>()
+
+        result.log(baseLogging, logExcludes, expectationResults, logCommentary)
 
         expectationResults
             .filter { it.error != null }

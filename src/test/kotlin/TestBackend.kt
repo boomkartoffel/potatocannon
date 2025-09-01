@@ -11,12 +11,25 @@ import io.ktor.server.application.*
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.netty.channel.ChannelHandlerContext
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import org.slf4j.bridge.SLF4JBridgeHandler
-import java.net.URI
-import java.net.http.HttpClient
 import java.util.logging.LogManager
+import kotlin.coroutines.CoroutineContext
+
+
+data class TimeOutConfig(
+    val id: String,
+    val returnOkAfterAttempt: Int,
+    val currentAttempt: Int = 1,
+) {
+    override fun equals(other: Any?): Boolean =
+        this === other || (other is TimeOutConfig && this.id == other.id)
+
+    override fun hashCode(): Int = id.hashCode()
+}
 
 
 @Serializable
@@ -30,6 +43,8 @@ object TestBackend {
     private var server: EmbeddedServer<*, *>? = null
 
     private var lastNumber: Int? = null
+
+    private val timeoutConfigs: MutableSet<TimeOutConfig> = mutableSetOf()
 
     init {
         // Remove existing handlers from JUL root logger -> this is to remove error logging from netty on shutdown and have the logback-test.xml apply
@@ -289,12 +304,35 @@ object TestBackend {
                     }
                     lastNumber = null
                 }
+
+                post("/timeout") {
+
+                    val id = call.request.queryParameters["id"] ?: ""
+                    val returnOkAfter = call.request.queryParameters["returnOkAfter"]?.toIntOrNull() ?: 1
+
+                    if (id.isEmpty()) {
+                        awaitCancellation()
+                    }
+
+                    val currentConfig = timeoutConfigs.find { it.id == id } ?: TimeOutConfig(id, returnOkAfter)
+
+                    if (currentConfig.currentAttempt >= returnOkAfter) {
+                        call.respondText("OK", status = HttpStatusCode.OK)
+                    } else {
+                        val newConfig =
+                            currentConfig.copy(currentAttempt = currentConfig.currentAttempt + 1)
+                        timeoutConfigs.remove(newConfig)
+                        timeoutConfigs.add(newConfig)
+
+                        awaitCancellation()
+                    }
+
+                }
             }
         }
 
         server?.start(wait = false)
     }
-
 
 
     fun stop() {
@@ -304,4 +342,21 @@ object TestBackend {
         )
         lastNumber = null
     }
+}
+
+
+private fun closeFromCoroutineContext(ctx: CoroutineContext): Boolean {
+    // Find Ktor's Netty context element
+    val nettyElem = ctx.fold<Any?>(null) { acc, el ->
+        acc ?: el.takeIf { it::class.java.name.endsWith("NettyDispatcher\$CurrentContext") }
+    } ?: return false
+
+    // It has a private field named "context" of type ChannelHandlerContext
+    val field = nettyElem::class.java.getDeclaredField("context").apply { isAccessible = true }
+    val chCtx = field.get(nettyElem) as ChannelHandlerContext
+
+    // Either of these works:
+    // chCtx.close()                // closes via the context (ChannelOutboundvoker)
+    chCtx.channel().close()         // closes the underlying channel immediately
+    return true
 }

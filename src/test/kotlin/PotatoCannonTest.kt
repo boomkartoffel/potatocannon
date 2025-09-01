@@ -5,6 +5,7 @@ import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
 import io.github.boomkartoffel.potatocannon.exception.ExecutionFailureException
+import io.github.boomkartoffel.potatocannon.exception.RequestSendingException
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.strategy.ContentType
@@ -20,6 +21,7 @@ import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObje
 import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
 import io.github.boomkartoffel.potatocannon.strategy.BearerAuth
 import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
+import io.github.boomkartoffel.potatocannon.strategy.ConcurrencyLimit
 import io.github.boomkartoffel.potatocannon.strategy.CookieHeader
 import io.github.boomkartoffel.potatocannon.strategy.CustomHeader
 import io.github.boomkartoffel.potatocannon.strategy.HeaderUpdateStrategy
@@ -28,7 +30,10 @@ import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
 import io.github.boomkartoffel.potatocannon.strategy.JavaTimeSupport
+import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
+import io.github.boomkartoffel.potatocannon.strategy.MaxRetry
 import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
+import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout
 import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
 import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode
 import io.github.boomkartoffel.potatocannon.strategy.withDescription
@@ -37,10 +42,8 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import io.kotest.matchers.types.shouldBeInstanceOf
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import java.time.Duration
@@ -200,31 +203,132 @@ class PotatoCannonTest {
     fun `Requests to non-existing server will have http request errors`() {
 
         val nonExistingBase = Potato(
-            method = HttpMethod.GET, path = "/test", Check {
-                it.statusCode shouldBe -1
-                it.error shouldNotBe null
-                it.error.shouldBeInstanceOf<java.net.ConnectException>()
-            }, OverrideBaseUrl("http://127.0.0.1:9999")
+            method = HttpMethod.GET, path = "/test",
+            OverrideBaseUrl("http://127.0.0.1:9999")
         )
 
-        baseCannon.fire(nonExistingBase)
+        shouldThrow<RequestSendingException> {
+            baseCannon
+                .addConfiguration(MaxRetry(5))
+                .fire(nonExistingBase)
+        }.message shouldBe "Failed to send request within 6 attempts"
+
     }
 
     @Test
-    fun `Requests to non-existing server in parallel will have http request errors`() {
+    fun `Requests are retried until Max Retry is reached`() {
 
-        val nonExistingBase = Potato(
-            method = HttpMethod.GET, path = "/test", Check {
-                it.statusCode shouldBe -1
-                it.error shouldNotBe null
-                it.error.shouldBeInstanceOf<java.net.ConnectException>()
-            }, OverrideBaseUrl("http://127.0.0.1:9999")
+        val timeoutPotato = Potato(
+            method = HttpMethod.POST, path = "/timeout",
+            MaxRetry(5),
+            RequestTimeout.of(100)
+        )
+
+        shouldThrow<RequestSendingException> {
+            baseCannon
+                .fire(timeoutPotato)
+        }.message shouldBe "Failed to send request within 6 attempts"
+    }
+
+    @Test
+    fun `Sequential Requests are retried in order`() {
+
+        val expect4Attempts = Check {
+            it.attempts shouldBe 4
+        }.withDescription("Request succeeded after 3 retries (4 attempts total)")
+
+        val timeoutPotato1 = Potato(
+            method = HttpMethod.POST, path = "/timeout",
+            MaxRetry(5),
+            RequestTimeout.of(300),
+            QueryParam("id", "Test1"),
+            QueryParam("returnOkAfter", "4"),
+            LogCommentary("First potato, should appear before second potato in log")
+        )
+
+        val timeoutPotato2 = Potato(
+            method = HttpMethod.POST, path = "/timeout",
+            MaxRetry(5),
+            RequestTimeout.of(150),
+            QueryParam("id", "Test2"),
+            QueryParam("returnOkAfter", "4"),
+            LogCommentary("Second potato, should appear after first potato in log")
         )
 
         baseCannon
-            .withFireMode(FireMode.PARALLEL)
-            .fire(nonExistingBase, nonExistingBase)
+            .addConfiguration(expect4Attempts)
+            .withFireMode(FireMode.SEQUENTIAL)
+            .fire(timeoutPotato1, timeoutPotato2)
     }
+
+    @Test
+    fun `12 Attempts take about 7 seconds with the increasing backoff`() {
+
+        val expect4Attempts = Check {
+            it.attempts shouldBe 12
+        }.withDescription("Request succeeded after 11 retries (12 attempts total)")
+
+        val timeoutPotato = Potato(
+            method = HttpMethod.POST, path = "/timeout",
+            MaxRetry(11),
+            RequestTimeout.of(100),
+            QueryParam("id", "RetryTest"),
+            QueryParam("returnOkAfter", "12"),
+        )
+
+        val totalTimeouts = 100 * 11
+        val expectedVariousOverhead = 17 * 12 // about 17ms overhead/timeout inaccuracy per request
+        val expectedFinalResponseTime = 10
+        val timeouts = listOf(10, 25, 50, 100, 200, 400, 600, 800, 1000, 1200, 1400)
+
+        val totalExpectedTime = totalTimeouts + expectedVariousOverhead + expectedFinalResponseTime + timeouts.sum()
+
+        val start = System.currentTimeMillis()
+
+        baseCannon
+            .addConfiguration(expect4Attempts)
+            .withFireMode(FireMode.SEQUENTIAL)
+            .fire(timeoutPotato)
+
+        val end = System.currentTimeMillis()
+
+        println("12 attempts took ${end - start} ms")
+        println("Expected time was $totalExpectedTime ms")
+        (end - start) shouldBeLessThan totalExpectedTime.toLong()
+    }
+
+    @Test
+    fun `Parallel Requests are retried out of order (even if concurrency is disabled)`() {
+
+        val expect4Attempts = Check {
+            it.attempts shouldBe 4
+        }.withDescription("Request succeeded after 3 retries (4 attempts total)")
+
+        val timeoutPotato1 = Potato(
+            method = HttpMethod.POST, path = "/timeout",
+            MaxRetry(5),
+            RequestTimeout.of(300),
+            QueryParam("id", "Test1Parallel"),
+            QueryParam("returnOkAfter", "4"),
+            LogCommentary("First potato, should appear as SECOND because of longer Request Timeout")
+        )
+
+        val timeoutPotato2 = Potato(
+            method = HttpMethod.POST, path = "/timeout",
+            MaxRetry(5),
+            RequestTimeout.of(150),
+            QueryParam("id", "Test2Parallel"),
+            QueryParam("returnOkAfter", "4"),
+            LogCommentary("Second potato, should appear FIRST in log due to shorter Request Timeout")
+        )
+
+        baseCannon
+            .addConfiguration(expect4Attempts)
+            .addConfiguration(ConcurrencyLimit(1))
+            .withFireMode(FireMode.PARALLEL)
+            .fire(timeoutPotato1, timeoutPotato2)
+    }
+
 
     @Test
     fun `Deserialization attempts at responses with no body fail with NoBodyException`() {
@@ -247,6 +351,25 @@ class PotatoCannonTest {
         shouldThrow<ResponseBodyMissingException> {
             baseCannon.fire(basePotato.addConfiguration(tryConversionOnNullBodyFails))
         }
+    }
+
+
+    @Test
+    fun `Log commentary appears first for cannon log comments and then for potato comments in order of configuration`() {
+        val potato = Potato(
+            method = HttpMethod.GET,
+            path = "/test",
+            LogCommentary("Third Commentary - Potato"),
+            LogCommentary("Fourth Commentary - Potato")
+        )
+
+        baseCannon
+            .addConfiguration(
+                LogCommentary("First Commentary - Cannon"),
+                LogCommentary("Second Commentary - Cannon")
+            )
+            .fire(potato)
+
     }
 
     @Test

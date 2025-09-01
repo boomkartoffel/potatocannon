@@ -7,6 +7,7 @@ import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.ExpectationResult
+import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
 import java.io.PrintWriter
 import java.io.StringWriter
 import kotlin.collections.component1
@@ -18,7 +19,7 @@ private const val ANSI_RED = "\u001B[31m"
 
 private const val exclamationSign = "⚠️"
 
-internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expectationResults: List<ExpectationResult>) {
+internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expectationResults: List<ExpectationResult>, logCommentary: List<LogCommentary>) {
 
     if (strategy == Logging.OFF) return
 
@@ -28,12 +29,20 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
 
     builder.appendLine()
     builder.appendLine(headerLine)
+
+    if (logCommentary.isNotEmpty()) {
+        builder.appendLine("| ")
+        logCommentary
+            .forEach { builder.appendLine("| ℹ\uFE0F ${it.message}") }
+        builder.appendLine("| ")
+    }
+
     builder.appendLine("| ⏩ Request")
-    builder.appendLine("|    Method:  ${potato.method}")
-    builder.appendLine("|    Path:    ${potato.path}")
+    builder.appendLine("|    Method:     ${potato.method}")
+    builder.appendLine("|    Path:       ${potato.path}")
 
     if (logExcludes.none { it == LogExclude.FULL_URL }) {
-        builder.appendLine("|    Full URL: $fullUrl")
+        builder.appendLine("|    Full URL:   $fullUrl")
     }
 
     if (queryParams.isNotEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.QUERY_PARAMS }) {
@@ -54,6 +63,10 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
     if (potato.body != null && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
         builder.appendLine("|    Body:")
         builder.appendLine(potato.body.prettifyIndented())
+    }
+
+    if (attempts > 1) {
+        builder.appendLine("|    $exclamationSign $attempts attempts at connecting $exclamationSign")
     }
 
     builder.appendLine("| ")
@@ -77,17 +90,17 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
         builder.appendLine(responseText()?.prettifyIndented())
     }
 
-    if (error != null) {
-        builder.appendLine("| ")
-        builder.appendLine("| $exclamationSign Error:")
-        builder.appendLine("|    ${error::class.simpleName}: ${error.message}")
-
-        val stackTrace = StringWriter().also { sw ->
-            error.printStackTrace(PrintWriter(sw))
-        }.toString()
-
-        builder.appendLine(stackTrace.prettifyIndented())
-    }
+//    if (error != null) {
+//        builder.appendLine("| ")
+//        builder.appendLine("| $exclamationSign Error:")
+//        builder.appendLine("|    ${error::class.simpleName}: ${error.message}")
+//
+//        val stackTrace = StringWriter().also { sw ->
+//            error.printStackTrace(PrintWriter(sw))
+//        }.toString()
+//
+//        builder.appendLine(stackTrace.prettifyIndented())
+//    }
 
     val greenCheck = "$ANSI_GREEN✔$ANSI_RESET"
     val redCross = "$ANSI_RED✘$ANSI_RESET"
