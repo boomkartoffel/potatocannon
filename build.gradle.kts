@@ -68,7 +68,7 @@ java {
 extensions.configure<MavenPublishBaseExtension> {
     publishToMavenCentral(automaticRelease = true)
     signAllPublications()
-    coordinates("io.github.boomkartoffel", "PotatoCannon", version.toString())
+    coordinates("io.github.boomkartoffel", "potato-cannon", version.toString())
     pom {
         name.set("PotatoCannon")
         description.set("A lightweight, expressive HTTP testing library for Java and Kotlin applications")

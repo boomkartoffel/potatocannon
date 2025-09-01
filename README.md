@@ -90,9 +90,9 @@ The Potato Cannon instance can be reused across multiple tests, allowing you to 
 Furthermore, you can reuse verifications by defining them once on a global level, which can be applied to multiple potatoes.
 
 ```kotlin
-   private val is200Verification = ResultVerification("Response is 200 OK") { result: Result ->
-        assertEquals(200, result.statusCode)
-    }
+    private val is200Expectation = Expectation("Response is 200 OK") { result ->
+                result.statusCode shouldBe 200
+}
 ```
 This allows you to rigidly define expectations without bloating each test with repetitive code.
 
@@ -101,9 +101,9 @@ The output of the Potato Cannon is structured and clear, making it easy to under
 ```
 ════════════════════  🥔  Potato Dispatch Log 🥔  ════════════════════
 | ⏩ Request
-|    Method:  POST
-|    Path:    /test
-|    Full URL: http://localhost:8080/test
+|    Method:     POST
+|    Path:       /test
+|    Full URL:   http://127.0.0.1:53097/test
 |    Headers:
 |      authorization: Basic dXNlcjpwYXNz
 |      content-type: application/json
@@ -114,15 +114,16 @@ The output of the Potato Cannon is structured and clear, making it easy to under
 | 
 | ⏪ Response
 |    Status:  200
-|    Time:    5ms
+|    Time:    3ms
 |    Headers:
 |      content-length: 5
 |      content-type: text/plain; charset=UTF-8
 |    Body:
 |      Hello
 | 
-| 🔍️ Verifications (1):
-|      - Status Code is 200 and return value is Hello
+| 🔍 Expectations (1):
+|      ✔ Status Code is 200 and return value is Hello
+
 
 ```
 
