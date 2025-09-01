@@ -242,7 +242,7 @@ class Result internal constructor(
      * using the supplied [deserializer].
      *
      * @param deserializer The deserializer to use.
-     * @param charset Charset used to decode the response body prior to parsing.
+     * @param charset [Charset] used to decode the response body prior to parsing.
      * @return A [List] of [T].
      * @throws ResponseBodyMissingException if the response has no body.
      * @throws DeserializationFailureException if deserialization fails.

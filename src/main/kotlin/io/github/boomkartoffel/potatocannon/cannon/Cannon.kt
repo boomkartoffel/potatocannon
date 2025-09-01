@@ -259,7 +259,6 @@ class Cannon {
                     throw ExecutionFailureException(t)
                 }
             }
-
         }
 
         val timeout = configs
