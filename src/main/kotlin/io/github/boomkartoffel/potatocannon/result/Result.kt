@@ -51,17 +51,86 @@ class Result internal constructor(
     val attempts: Int
 ) {
 
+    /**
+     * Decodes the raw response body into text using the given [charset].
+     *
+     * @param charset The character set to use when decoding the body.
+     * @return The decoded response text, or `null` if the response has no body.
+     * @since 0.1.0
+     */
     fun responseText(charset: Charset) = responseBody?.toString(charset)
+
+    /**
+     * Decodes the raw response body into text by automatic detection.
+     *
+     * The charset is typically resolved from the `Content-Type` response header or defaults to UTF-8.
+     *
+     * @return The decoded response text, or `null` if the response has no body.
+     * @since 0.1.0
+     */
     fun responseText() = responseText(responseCharset())
 
+    /**
+     * Deserializes the response body into one instance of [T] using the **default format (JSON)**
+     * and the detected response charset.
+     *
+     * @return A new instance of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsObject(clazz: Class<T>): T = bodyAsObject(clazz, defaultFormat)
+
+    /**
+     * Deserializes the response body into one instance of [T] using the **default format (JSON)**
+     * and the specified [charset] to decode the body text.
+     *
+     * @param charset Charset used to decode the response body prior to parsing.
+     * @return A new instance of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsObject(clazz: Class<T>, charset: Charset): T = bodyAsObject(clazz, defaultFormat, charset)
+
+    /**
+     * Deserializes the response body into one instance of [T] using the given [format]
+     * and the detected response charset.
+     *
+     * @param format The wire format to use (e.g., JSON or XML).
+     * @return A new instance of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsObject(clazz: Class<T>, format: DeserializationFormat): T =
         bodyAsObject(clazz, format, responseCharset())
 
+    /**
+     * Deserializes the response body into one instance of [T] using the provided [deserializer]
+     * and the detected response charset.
+     *
+     * @param deserializer A custom [Deserializer] implementation.
+     * @return A new instance of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsObject(clazz: Class<T>, deserializer: Deserializer): T =
         bodyAsObject(clazz, deserializer, responseCharset())
 
+    /**
+     * Deserializes the response body into one instance of [T] using the given [format]
+     * and [charset]. The underlying deserializer is chosen based on the [DeserializationFormat] and will
+     * apply any configured [DeserializationStrategy].
+     *
+     * @param format The wire format to use (e.g., JSON or XML).
+     * @param charset Charset used to decode the response body prior to parsing.
+     * @return A new instance of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsObject(clazz: Class<T>, format: DeserializationFormat, charset: Charset): T {
         val deserializer = when (format) {
             DeserializationFormat.JSON -> JsonDeserializer(deserializationStrategies)
@@ -71,16 +140,72 @@ class Result internal constructor(
         return bodyAsObject(clazz, deserializer, charset)
     }
 
+
+    /**
+     * Deserializes the response body into a list of [T] using the default wire format
+     * and the detected response charset.
+     *
+     * @return A [List] of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsList(clazz: Class<T>): List<T> = bodyAsList(clazz, defaultFormat, responseCharset())
+
+
+    /**
+     * Deserializes the response body into a list of [T] using the default wire format
+     * and the specified [charset] to decode the body text.
+     *
+     * @param charset Charset used to decode the response body prior to parsing.
+     * @return A [List] of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsList(clazz: Class<T>, charset: Charset): List<T> =
         bodyAsList(clazz, defaultFormat, charset)
 
+
+    /**
+     * Deserializes the response body into a list of [T] using the given [format]
+     * and the detected response charset.
+     *
+     * @param format The [DeserializationFormat] to use (e.g., JSON or XML).
+     * @return A [List] of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsList(clazz: Class<T>, format: DeserializationFormat): List<T> =
         bodyAsList(clazz, format, responseCharset())
 
+
+    /**
+     * Deserializes the response body into a list of [T] using the provided [deserializer]
+     * and the detected response charset.
+     *
+     * @param deserializer A custom [Deserializer] implementation.
+     * @return A [List] of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsList(clazz: Class<T>, deserializer: Deserializer): List<T> =
         bodyAsList(clazz, deserializer, responseCharset())
 
+    /**
+     * Deserializes the response body into a list of [T] using the given [format]
+     * and [charset]. The underlying deserializer is chosen based on [format] and will
+     * apply any configured [DeserializationStrategy].
+     *
+     * @param format The wire format to use (e.g., JSON or XML).
+     * @param charset Charset used to decode the response body prior to parsing.
+     * @return A [List] of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsList(clazz: Class<T>, format: DeserializationFormat, charset: Charset): List<T> {
         val deserializer = when (format) {
             DeserializationFormat.JSON -> JsonDeserializer(deserializationStrategies)
@@ -91,6 +216,17 @@ class Result internal constructor(
     }
 
 
+    /**
+     * Deserializes the response body (decoded with [charset]) into one instance of [T]
+     * using the supplied [deserializer].
+     *
+     * @param deserializer The deserializer to use.
+     * @param charset Charset used to decode the response body prior to parsing.
+     * @return A new instance of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsObject(clazz: Class<T>, deserializer: Deserializer, charset: Charset): T {
         val text = responseText(charset)
             ?: throw ResponseBodyMissingException()
@@ -101,6 +237,17 @@ class Result internal constructor(
         }
     }
 
+    /**
+     * Deserializes the response body (decoded with [charset]) into a list of [T]
+     * using the supplied [deserializer].
+     *
+     * @param deserializer The deserializer to use.
+     * @param charset Charset used to decode the response body prior to parsing.
+     * @return A [List] of [T].
+     * @throws ResponseBodyMissingException if the response has no body.
+     * @throws DeserializationFailureException if deserialization fails.
+     * @since 0.1.0
+     */
     fun <T> bodyAsList(clazz: Class<T>, deserializer: Deserializer, charset: Charset): List<T> {
         val text = responseText(charset)
             ?: throw ResponseBodyMissingException()

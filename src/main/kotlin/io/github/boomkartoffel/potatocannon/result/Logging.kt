@@ -90,18 +90,6 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
         builder.appendLine(responseText()?.prettifyIndented())
     }
 
-//    if (error != null) {
-//        builder.appendLine("| ")
-//        builder.appendLine("| $exclamationSign Error:")
-//        builder.appendLine("|    ${error::class.simpleName}: ${error.message}")
-//
-//        val stackTrace = StringWriter().also { sw ->
-//            error.printStackTrace(PrintWriter(sw))
-//        }.toString()
-//
-//        builder.appendLine(stackTrace.prettifyIndented())
-//    }
-
     val greenCheck = "$ANSI_GREEN✔$ANSI_RESET"
     val redCross = "$ANSI_RED✘$ANSI_RESET"
 
@@ -129,7 +117,6 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
             }
 
             val label = if (unnamed.size == 1) "1 unnamed check" else "${unnamed.size} unnamed checks"
-//            builder.appendLine("|      $checkmark $label ($passed passed, $assertionFailed failed, $otherFailed other errors)")
             builder.appendLine("|      $checkmark $label ($passed $greenCheck | $assertionFailed $redCross | $otherFailed $exclamationSign)")
 
             val errorDescriptions = unnamed
