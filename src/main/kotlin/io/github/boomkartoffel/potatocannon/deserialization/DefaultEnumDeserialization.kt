@@ -37,12 +37,15 @@ annotation class EnumDefaultValue
 
 internal class EnumAnnotationIntrospector : NopAnnotationIntrospector() {
 
-    override fun findDefaultEnumValue(
-        ac: AnnotatedClass,
-        enumValues: Array<out Enum<*>>
-    ): Enum<*>? = enumValues.firstOrNull { ev ->
-        val field = ac.rawType.getField(ev.name)
-        field.isAnnotationPresent(EnumDefaultValue::class.java)
+    override fun findDefaultEnumValue(enumCls: Class<Enum<*>>): Enum<*>? {
+        val values = enumCls.enumConstants ?: return null
+        for (ev in values) {
+            val field = try { enumCls.getField(ev.name) } catch (_: NoSuchFieldException) { continue }
+            if (field.isAnnotationPresent(EnumDefaultValue::class.java)) {
+                return ev
+            }
+        }
+        return null
     }
 }
 

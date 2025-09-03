@@ -188,6 +188,7 @@ class Cannon {
                     val cause = t.cause ?: t
                     when (cause) {
                         is PotatoCannonException -> throw cause
+                        is AssertionError -> throw cause
                         else -> throw ExecutionFailureException(cause)
                     }
                 }

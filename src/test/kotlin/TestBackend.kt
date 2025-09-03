@@ -40,7 +40,7 @@ data class User(
 )
 
 object TestBackend {
-    private var server: EmbeddedServer<*, *>? = null
+    private lateinit var server: ApplicationEngine
 
     private var lastNumber: Int? = null
 

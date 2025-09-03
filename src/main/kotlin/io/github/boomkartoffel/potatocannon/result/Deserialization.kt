@@ -14,7 +14,6 @@ import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObje
 import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveEnums
 import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
 import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
-import io.github.boomkartoffel.potatocannon.strategy.JavaTimeSupport
 import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
 import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
 import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode
@@ -63,7 +62,6 @@ interface Deserializer {
 private fun buildMapper(strategies: List<DeserializationStrategy>, format: DeserializationFormat): ObjectMapper {
     var nullCoercion: NullCoercion = NullCoercion.STRICT
     var unknownProps: UnknownPropertyMode = UnknownPropertyMode.IGNORE
-    var javaTime = false
     var caseInsensitiveProperties = false
     var caseInsensitiveEnums = false
     var emptyStringAsNull = false
@@ -73,7 +71,6 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
         when (s) {
             is NullCoercion -> nullCoercion = s
             is UnknownPropertyMode -> unknownProps = s
-            JavaTimeSupport -> javaTime = true
             CaseInsensitiveProperties -> caseInsensitiveProperties = true
             AcceptEmptyStringAsNullObject -> emptyStringAsNull = true
             UnknownEnumAsDefault -> unknownEnumAsDefault = true
@@ -86,11 +83,11 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
 
     when (nullCoercion) {
         NullCoercion.STRICT ->
-            kotlinModuleBuilder.configure(KotlinFeature.NewStrictNullChecks, true)
+            kotlinModuleBuilder.configure(KotlinFeature.StrictNullChecks, true)
 
         NullCoercion.RELAX ->
             kotlinModuleBuilder
-                .configure(KotlinFeature.NewStrictNullChecks, false)
+                .configure(KotlinFeature.StrictNullChecks, false)
                 .configure(KotlinFeature.NullToEmptyCollection, true)
                 .configure(KotlinFeature.NullToEmptyMap, true)
                 .configure(KotlinFeature.NullIsSameAsDefault, true)
@@ -108,7 +105,9 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
         UnknownPropertyMode.FAIL -> builder.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
     }
 
-    if (javaTime) builder.addModule(JavaTimeModule())
+    //JavaTimeModule enabled by default
+    builder.addModule(JavaTimeModule())
+
     if (caseInsensitiveProperties) builder.enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES)
     if (caseInsensitiveEnums) builder.enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS)
     if (emptyStringAsNull) builder.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)

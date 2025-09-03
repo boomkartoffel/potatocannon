@@ -50,15 +50,15 @@ enum class NullCoercion : DeserializationStrategy {
     RELAX
 }
 
-/**
- * Enables proper deserialization of Java 8+ date/time types (`java.time.*`)
- * such as `LocalDate`, `Instant`, and `ZonedDateTime`.
- *
- * Disabled by default.
- *
- * @since 0.1.0
- */
-object JavaTimeSupport : DeserializationStrategy
+///**
+// * Enables proper deserialization of Java 8+ date/time types (`java.time.*`)
+// * such as `LocalDate`, `Instant`, and `ZonedDateTime`.
+// *
+// * Disabled by default.
+// *
+// * @since 0.1.0
+// */
+//object JavaTimeSupport : DeserializationStrategy
 
 /**
  * Makes property name matching case-insensitive.

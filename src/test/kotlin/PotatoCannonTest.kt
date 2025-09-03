@@ -30,7 +30,6 @@ import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
-import io.github.boomkartoffel.potatocannon.strategy.JavaTimeSupport
 import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
 import io.github.boomkartoffel.potatocannon.strategy.RetryLimit
 import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
@@ -586,7 +585,7 @@ class PotatoCannonTest {
     }
 
     @Test
-    fun `GET request for JavaTimeCheckObject fails on not activating java time and works on allowing it`() {
+    fun `GET request for JavaTimeCheckObject works by default`() {
         val check = Check { result: Result ->
             result.bodyAsObject(JavaTimeCheckObject::class.java)
         }
@@ -598,17 +597,10 @@ class PotatoCannonTest {
         )
 
 
-        shouldThrow<DeserializationFailureException> {
+        shouldNotThrow<DeserializationFailureException> {
             baseCannon.fire(
                 //default is disabled
                 potato,
-            )
-        }
-
-        shouldNotThrow<DeserializationFailureException> {
-            baseCannon.fire(
-                potato
-                    .addConfiguration(JavaTimeSupport),
             )
         }
 
@@ -872,7 +864,7 @@ class PotatoCannonTest {
             body = TextBody("{ }"),
         )
 
-        val baseLoggingPotatoes = Logging.entries.map { logging ->
+        val baseLoggingPotatoes = Logging.values().map { logging ->
             basePotato.withConfiguration(
                 headers + logging + Expectation(
                     "This is logging: $logging", {
@@ -1058,7 +1050,7 @@ class PotatoCannonTest {
 
     @Test
     fun `POST with all kinds of methods`() {
-        val potatoes = HttpMethod.entries.map {
+        val potatoes = HttpMethod.values().map {
             Potato(
                 method = it, path = "/not-available-endpoint", body = TextBody("{ }"), configuration = listOf(
                     is404Expectation

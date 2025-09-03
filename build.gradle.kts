@@ -1,19 +1,21 @@
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "2.1.20"
-    kotlin("plugin.serialization") version "2.1.20"
-    id("com.vanniktech.maven.publish") version "0.34.0"
+    kotlin("jvm") version "1.7.22"
+    kotlin("plugin.serialization") version "1.7.22"
+    id("com.vanniktech.maven.publish") version "0.25.3"
 }
 
 group = "io.github.boomkartoffel"
-version = "0.1.0-alpha"
+version = "0.1.0-alpha2"
 
-val ktorVersion = "3.2.0"
-val jacksonVersion = "2.19.1"
-val kotlinxSerializationVersion = "1.8.1"
+//val ktorVersion = "3.2.0"
+val ktorVersion = "2.1.3"
+val jacksonVersion = "2.14.3"
+val kotlinxSerializationVersion = "1.4.1"
 val junitJupiterVersion = "5.13.1"
-val kotestVersion = "5.9.1"
+val kotestVersion = "5.5.5"
 val slf4jVersion = "2.0.17"
 
 repositories {
@@ -49,15 +51,28 @@ tasks.test {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(11)
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11) // classfile target
-        freeCompilerArgs.add("-Xjdk-release=11")
+java {
+    toolchain { languageVersion.set(JavaLanguageVersion.of(11)) }
+}
+
+//tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+//    compilerOptions {
+//        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11) // classfile target
+//        freeCompilerArgs.add("-Xjdk-release=11")
+//    }
+//}
+
+tasks.withType<KotlinCompile>().configureEach {
+    kotlinOptions {
+        jvmTarget = "11"
+        // Keep Kotlin from linking against APIs newer than 11 (works in 1.7.x)
+        freeCompilerArgs = freeCompilerArgs + listOf("-Xjdk-release=11")
     }
 }
+
 
 // (Optional, harmless in Kotlin-only projects)
 java {
