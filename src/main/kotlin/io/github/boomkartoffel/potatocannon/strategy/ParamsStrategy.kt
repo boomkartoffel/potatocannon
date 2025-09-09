@@ -10,7 +10,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  * @param value the value associated with the key.
  * @since 0.1.0
  */
-class QueryParam(val key: String, val value: String) : PotatoConfiguration, CannonConfiguration {
+class QueryParam(val key: String, val value: String) : PotatoSetting, CannonSetting {
     fun apply(queryParams: MutableMap<String, List<String>>) {
         if (!queryParams.containsKey(key)) {
             queryParams[key] = mutableListOf(value)

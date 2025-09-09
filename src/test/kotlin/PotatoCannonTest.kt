@@ -438,7 +438,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST,
             path = "/test",
             body = TextBody("{ \"message\": \"hi\" }"),
-            configuration = listOf(
+            settings = listOf(
                 ContentType.JSON, Expectation("Status Code is 200 and return value is Hello") { result ->
                     assertEquals(200, result.statusCode)
                     assertEquals("Hello", result.responseText())
@@ -927,7 +927,7 @@ class PotatoCannonTest {
     @Test
     fun `POST with multiple headers will have later ones overwrite earlier`() {
         val potato = Potato(
-            method = HttpMethod.POST, body = TextBody("{ }"), path = "/test", configuration = listOf(
+            method = HttpMethod.POST, body = TextBody("{ }"), path = "/test", settings = listOf(
                 ContentType.JSON,
                 ContentType.XML,
                 QueryParam("queryPotato", "valuePotato"),
@@ -984,7 +984,7 @@ class PotatoCannonTest {
     @Test
     fun `POST with multiple headers to mockserver will have later ones overwrite earlier`() {
         val potato = Potato(
-            method = HttpMethod.POST, body = TextBody("{ }"), path = "/test", configuration = listOf(
+            method = HttpMethod.POST, body = TextBody("{ }"), path = "/test", settings = listOf(
                 ContentType.JSON,
                 ContentType.XML,
                 QueryParam("queryPotato", "valuePotato"),
@@ -1052,7 +1052,7 @@ class PotatoCannonTest {
     fun `POST with all kinds of methods`() {
         val potatoes = HttpMethod.values().map {
             Potato(
-                method = it, path = "/not-available-endpoint", body = TextBody("{ }"), configuration = listOf(
+                method = it, path = "/not-available-endpoint", body = TextBody("{ }"), settings = listOf(
                     is404Expectation
                 )
             )

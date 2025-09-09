@@ -11,7 +11,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  *
  * @since 0.1.0
  */
-enum class FireMode : CannonConfiguration {
+enum class FireMode : CannonSetting {
 
     /**
      * Sends requests one at a time, in the order the potatoes are provided in the list.

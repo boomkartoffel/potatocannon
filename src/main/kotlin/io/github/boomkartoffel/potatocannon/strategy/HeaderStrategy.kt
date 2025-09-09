@@ -11,7 +11,7 @@ import java.util.Base64
  *
  * @since 0.1.0
  */
-sealed interface HeaderStrategy : CannonConfiguration, PotatoConfiguration {
+sealed interface HeaderStrategy : CannonSetting, PotatoSetting {
     fun apply(headers: MutableMap<String, List<String>>)
 }
 

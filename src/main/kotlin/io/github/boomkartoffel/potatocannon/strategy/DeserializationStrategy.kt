@@ -5,8 +5,8 @@ import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
 /**
  * Configurations that influence how the response is deserialized.
  *
- * These are [CannonConfiguration]s, so they apply globally to the whole cannon run,
- * unless overridden by [PotatoConfiguration] at the request level.
+ * These are [CannonSetting]s, so they apply globally to the whole cannon run,
+ * unless overridden by [PotatoSetting] at the request level.
  *
  * Defaults:
  * - [UnknownPropertyMode] → [UnknownPropertyMode.IGNORE]
@@ -15,7 +15,7 @@ import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
  *
  * @since 0.1.0
  */
-sealed interface DeserializationStrategy : CannonConfiguration, PotatoConfiguration
+sealed interface DeserializationStrategy : CannonSetting, PotatoSetting
 
 /**
  * Determines how unknown properties in JSON payloads are handled.

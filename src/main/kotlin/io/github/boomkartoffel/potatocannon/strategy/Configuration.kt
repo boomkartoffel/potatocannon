@@ -15,7 +15,7 @@ package io.github.boomkartoffel.potatocannon.strategy
 
  * @since 0.1.0
  */
-sealed interface PotatoConfiguration
+sealed interface PotatoSetting
 
 /**
  * Marker interface for configurations that apply globally to the Cannon (test runner).
@@ -32,4 +32,4 @@ sealed interface PotatoConfiguration
  *
  * @since 0.1.0
  */
-sealed interface CannonConfiguration
+sealed interface CannonSetting

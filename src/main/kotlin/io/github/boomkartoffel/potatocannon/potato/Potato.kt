@@ -1,6 +1,6 @@
 package io.github.boomkartoffel.potatocannon.potato
 
-import io.github.boomkartoffel.potatocannon.strategy.PotatoConfiguration
+import io.github.boomkartoffel.potatocannon.strategy.PotatoSetting
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
 
@@ -32,33 +32,33 @@ enum class HttpMethod {
  * @property method The HTTP method to use (e.g. GET, POST, PUT, DELETE).
  * @property path The relative path of the request (e.g. "/users").
  * @property body Optional request body, either textual or binary.
- * @property configuration Optional list of [PotatoConfiguration] items like headers, query parameters, and verifications of the request.
+ * @property settings Optional list of [PotatoSetting] items like headers, query parameters, and verifications of the request.
  * @since 0.1.0
  */
 class Potato(
     val method: HttpMethod,
     val path: String,
     val body: PotatoBody?,
-    val configuration: List<PotatoConfiguration> = listOf()
+    val settings: List<PotatoSetting> = listOf()
 ) {
 
     constructor(
         method: HttpMethod,
         path: String,
-        vararg configuration: PotatoConfiguration
+        vararg configuration: PotatoSetting
     ) : this(method, path, null, configuration.toList())
 
     constructor(
         method: HttpMethod,
         path: String,
-        configuration: List<PotatoConfiguration>
+        configuration: List<PotatoSetting>
     ) : this(method, path, null, configuration)
 
     constructor(
         method: HttpMethod,
         path: String,
         body: PotatoBody,
-        vararg configuration: PotatoConfiguration
+        vararg configuration: PotatoSetting
     ) : this(method, path, body, configuration.toList())
 
     /**
@@ -71,7 +71,7 @@ class Potato(
      * @since 0.1.0
      */
     fun withMethod(newMethod: HttpMethod): Potato =
-        Potato(newMethod, path, body, configuration)
+        Potato(newMethod, path, body, settings)
 
     /**
      * Returns a copy of this [Potato] with a different request path.
@@ -83,7 +83,7 @@ class Potato(
      * @since 0.1.0
      */
     fun withPath(newPath: String): Potato =
-        Potato(method, newPath, body, configuration)
+        Potato(method, newPath, body, settings)
 
     /**
      * Adds an [Expectation] to this [Potato]’s configuration.
@@ -108,7 +108,7 @@ class Potato(
     * @since 0.1.0
     */
     fun withBody(newBody: PotatoBody?): Potato =
-        Potato(method, path, newBody, configuration)
+        Potato(method, path, newBody, settings)
 
     /**
      * Replaces the entire configuration list for this [Potato].
@@ -120,7 +120,7 @@ class Potato(
      * @return A new [Potato] with [newConfiguration].
      * @since 0.1.0
      */
-    fun withConfiguration(newConfiguration: List<PotatoConfiguration>): Potato =
+    fun withConfiguration(newConfiguration: List<PotatoSetting>): Potato =
         Potato(method, path, body, newConfiguration)
 
     /**
@@ -134,7 +134,7 @@ class Potato(
      * @return A new [Potato] with [newConfiguration].
      * @since 0.1.0
      */
-    fun withConfiguration(vararg newConfiguration: PotatoConfiguration): Potato = this.withConfiguration(newConfiguration.toList())
+    fun withConfiguration(vararg newConfiguration: PotatoSetting): Potato = this.withConfiguration(newConfiguration.toList())
 
     /**
      * Appends one or more configuration entries to this [Potato].
@@ -146,8 +146,8 @@ class Potato(
      * @return A new [Potato] with the entries appended.
      * @since 0.1.0
      */
-    fun addConfiguration(vararg addedConfiguration: PotatoConfiguration): Potato =
-        this.withConfiguration(configuration + addedConfiguration)
+    fun addConfiguration(vararg addedConfiguration: PotatoSetting): Potato =
+        this.withConfiguration(settings + addedConfiguration)
 
     /**
      * Appends one or more configuration entries to this [Potato].
@@ -159,7 +159,7 @@ class Potato(
      * @return A new [Potato] with the entries appended.
      * @since 0.1.0
      */
-    fun addConfiguration(addedConfiguration: List<PotatoConfiguration>): Potato =
-        this.withConfiguration(configuration + addedConfiguration)
+    fun addConfiguration(addedConfiguration: List<PotatoSetting>): Potato =
+        this.withConfiguration(settings + addedConfiguration)
 
 }

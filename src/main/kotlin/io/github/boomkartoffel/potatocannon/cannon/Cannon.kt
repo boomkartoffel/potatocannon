@@ -10,7 +10,7 @@ import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.result.Headers
 import io.github.boomkartoffel.potatocannon.result.log
 import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
-import io.github.boomkartoffel.potatocannon.strategy.CannonConfiguration
+import io.github.boomkartoffel.potatocannon.strategy.CannonSetting
 import io.github.boomkartoffel.potatocannon.strategy.Check
 import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
 import io.github.boomkartoffel.potatocannon.strategy.FireMode
@@ -44,21 +44,21 @@ import java.util.concurrent.TimeUnit
  * automation of REST-like APIs.
  *
  * @property baseUrl The root URL used to resolve all relative request paths.
- * @property configuration A list of reusable strategies or behaviors that affect request firing.
+ * @property settings A list of reusable strategies or behaviors that affect request firing.
  * @since 0.1.0
  */
 class Cannon {
     private val baseUrl: String
-    private val configuration: List<CannonConfiguration>
+    private val settings: List<CannonSetting>
     private val client: HttpClient
 
     constructor(baseUrl: String) : this(baseUrl, listOf())
 
-    constructor(baseUrl: String, vararg configuration: CannonConfiguration) : this(baseUrl, configuration.toList())
+    constructor(baseUrl: String, vararg configuration: CannonSetting) : this(baseUrl, configuration.toList())
 
-    constructor(baseUrl: String, configuration: List<CannonConfiguration>) {
+    constructor(baseUrl: String, configuration: List<CannonSetting>) {
         this.baseUrl = baseUrl
-        this.configuration = configuration
+        this.settings = configuration
         this.client = HttpClient.newHttpClient()
     }
 
@@ -75,7 +75,7 @@ class Cannon {
      * @return A new `Cannon` with extended configuration.
      * @since 0.1.0
      */
-    fun addConfiguration(vararg additionalConfiguration: CannonConfiguration): Cannon =
+    fun addConfiguration(vararg additionalConfiguration: CannonSetting): Cannon =
         this.addConfiguration(additionalConfiguration.toList())
 
     /**
@@ -87,8 +87,8 @@ class Cannon {
      * @return A new `Cannon` with extended configuration.
      * @since 0.1.0
      */
-    fun addConfiguration(additionalConfiguration: List<CannonConfiguration>): Cannon =
-        Cannon(baseUrl, configuration + additionalConfiguration)
+    fun addConfiguration(additionalConfiguration: List<CannonSetting>): Cannon =
+        Cannon(baseUrl, settings + additionalConfiguration)
 
     /**
      * Fires the givens single or multiple [Potato].
@@ -113,14 +113,14 @@ class Cannon {
      * @since 0.1.0
      */
     fun fire(potatoes: List<Potato>): List<Result> {
-        val mode = configuration
+        val mode = settings
             .filterIsInstance<FireMode>()
             .lastOrNull() ?: FireMode.PARALLEL
 
         val isSequentialFiring = (mode == FireMode.SEQUENTIAL)
         val isParallelFiring = !isSequentialFiring
 
-        var maxConcurrent = configuration
+        var maxConcurrent = settings
             .filterIsInstance<ConcurrencyLimit>()
             .lastOrNull()
             ?.value ?: ConcurrencyLimit.DEFAULT
@@ -138,7 +138,7 @@ class Cannon {
                     var attempt = 0
                     var isPermitAcquired = false
 
-                    val retryLimit = (configuration + potato.configuration)
+                    val retryLimit = (settings + potato.settings)
                         .filterIsInstance<RetryLimit>()
                         .lastOrNull()
                         ?.count ?: RetryLimit.DEFAULT
@@ -218,7 +218,7 @@ class Cannon {
 
         val allQueryParams = mutableMapOf<String, List<String>>()
 
-        val configs = configuration + potato.configuration
+        val configs = settings + potato.settings
 
         configs
             .filterIsInstance<QueryParam>()
@@ -234,7 +234,7 @@ class Cannon {
             ""
         }
 
-        val urlToUse = potato.configuration
+        val urlToUse = potato.settings
             .filterIsInstance<OverrideBaseUrl>()
             .lastOrNull()?.url ?: baseUrl
 

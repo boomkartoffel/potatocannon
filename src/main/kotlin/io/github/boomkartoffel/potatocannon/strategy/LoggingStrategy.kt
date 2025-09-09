@@ -10,7 +10,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  *
  * @since 0.1.0
  */
-enum class Logging : CannonConfiguration, PotatoConfiguration {
+enum class Logging : CannonSetting, PotatoSetting {
     /**
      * Disables all logging.
      */
@@ -44,7 +44,7 @@ enum class Logging : CannonConfiguration, PotatoConfiguration {
  *
  * There is no default exclusion, so all details are logged unless specified otherwise.
  */
-enum class LogExclude : CannonConfiguration, PotatoConfiguration {
+enum class LogExclude : CannonSetting, PotatoSetting {
     /**
      * Excludes the full URL from the log.
      */

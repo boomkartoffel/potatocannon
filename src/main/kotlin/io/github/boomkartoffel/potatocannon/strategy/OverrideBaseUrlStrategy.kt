@@ -13,4 +13,4 @@ package io.github.boomkartoffel.potatocannon.strategy
  * @property url The alternate base URL to use instead of the cannon's default.
  * @since 0.1.0
  */
-class OverrideBaseUrl(val url: String): PotatoConfiguration
+class OverrideBaseUrl(val url: String): PotatoSetting

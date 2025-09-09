@@ -12,7 +12,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  * @since 0.1.0
  */
 @JvmInline
-value class ConcurrencyLimit(val value: Int) : CannonConfiguration {
+value class ConcurrencyLimit(val value: Int) : CannonSetting {
     init {
         require(value in MIN..MAX) { "Concurrency must be between $MIN and $MAX, was $value" }
     }
@@ -52,7 +52,7 @@ value class ConcurrencyLimit(val value: Int) : CannonConfiguration {
  * @since 0.1.0
  */
 @JvmInline
-value class RetryLimit(val count: Int) : CannonConfiguration, PotatoConfiguration {
+value class RetryLimit(val count: Int) : CannonSetting, PotatoSetting {
     init {
         require(count in MIN..MAX) { "Max retries must be between $MIN and $MAX, was $count" }
     }
@@ -82,7 +82,7 @@ value class RetryLimit(val count: Int) : CannonConfiguration, PotatoConfiguratio
  * @since 0.1.0
  */
 @JvmInline
-value class RequestTimeout(val durationMillis: Long) : CannonConfiguration, PotatoConfiguration {
+value class RequestTimeout(val durationMillis: Long) : CannonSetting, PotatoSetting {
     init {
         require(durationMillis in MIN..MAX) {
             "Request timeout must be between $MIN and $MAX ms, was $durationMillis ms"

@@ -19,4 +19,4 @@ package io.github.boomkartoffel.potatocannon.strategy
  * @property message The commentary text to be shown in the log.
  * @since 0.1.0
  */
-class LogCommentary(val message: String) : PotatoConfiguration, CannonConfiguration
+class LogCommentary(val message: String) : PotatoSetting, CannonSetting
