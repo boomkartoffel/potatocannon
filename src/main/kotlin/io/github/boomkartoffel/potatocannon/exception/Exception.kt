@@ -1,4 +1,6 @@
 package io.github.boomkartoffel.potatocannon.exception
+import java.util.concurrent.CancellationException
+import java.lang.InterruptedException
 
 sealed class PotatoCannonException(
     message: String,
@@ -32,9 +34,24 @@ class DeserializationFailureException internal constructor(
 ) : PotatoCannonException("Failed to deserialize response body as $className\n${cause.message}", cause)
 
 /**
- * Wraps failures that occur while **building** or **preparing** a request
- * (e.g., invalid URI, illegal header name/value) or while handling the
- * response post-send.
+ * Thrown when a request fails during **execution** while waiting for the async
+ * computation to complete.
+ *
+ *This exception is only created when awaiting the result fails due to:
+ *
+ * - [CancellationException] — the computation was cancelled
+ * - [InterruptedException] — the waiting thread was interrupted
+ *
+ * The original cause is preserved as [cause].
+ *
+ * @since 0.1.0
+ */
+class RequestExecutionException internal constructor(
+    cause: Throwable
+) : PotatoCannonException("Request execution failed", cause)
+
+/**
+ * Wraps failures that occur while **building** a request
  *
  * Typical sources:
  * - `URI.create(fullUrl)` throws for an invalid URL.
@@ -44,9 +61,9 @@ class DeserializationFailureException internal constructor(
  *
  * @since 0.1.0
  */
-class ExecutionFailureException internal constructor(
+class RequestPreparationException internal constructor(
     cause: Throwable
-) : PotatoCannonException("Request execution failed", cause)
+) : PotatoCannonException("Request preparation failed", cause)
 
 /**
  * Emitted when an attempt to **send** the request fails (I/O, timeouts, connection issues).
@@ -57,7 +74,7 @@ class ExecutionFailureException internal constructor(
  * @property attempt The 1-based attempt number that failed.
  * @since 0.1.0
  */
-class RequestSendingException internal constructor(
+class RequestSendingFailureException internal constructor(
     cause: Throwable,
     attempt: Int
 ) : PotatoCannonException("Failed to send request within $attempt attempts", cause)

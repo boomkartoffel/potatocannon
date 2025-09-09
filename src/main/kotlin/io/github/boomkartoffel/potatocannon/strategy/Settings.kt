@@ -18,7 +18,7 @@ package io.github.boomkartoffel.potatocannon.strategy
 sealed interface PotatoSetting
 
 /**
- * Marker interface for settings that apply globally to the Cannon (test runner).
+ * Marker interface for settings that apply globally to the Cannon.
  *
  * Implementations of this interface define settings such as execution mode (sequential/parallel),
  * shared headers, global verifications, or logging behavior that affect all fired requests.

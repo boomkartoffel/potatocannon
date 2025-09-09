@@ -1,8 +1,9 @@
 package io.github.boomkartoffel.potatocannon.cannon
 
-import io.github.boomkartoffel.potatocannon.exception.ExecutionFailureException
+import io.github.boomkartoffel.potatocannon.exception.RequestExecutionException
 import io.github.boomkartoffel.potatocannon.exception.PotatoCannonException
-import io.github.boomkartoffel.potatocannon.exception.RequestSendingException
+import io.github.boomkartoffel.potatocannon.exception.RequestPreparationException
+import io.github.boomkartoffel.potatocannon.exception.RequestSendingFailureException
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
@@ -37,7 +38,7 @@ import java.util.concurrent.TimeUnit
 
 
 /**
- * A configurable HTTP test runner that fires predefined requests ("Potatoes") against a target base URL.
+ * A configurable HTTP test runner that fires predefined requests ([Potato]) against a target base URL.
  *
  * The `Cannon` supports sequential and parallel execution modes, custom headers, logging, expectations,
  * and other reusable setting strategies. Designed for functional testing, stress testing, or
@@ -162,7 +163,7 @@ class Cannon {
                                 results.add(r)
                                 return@submit
                             } catch (t: Throwable) {
-                                if (t is RequestSendingException && attempt < retryLimit) {
+                                if (t is RequestSendingFailureException && attempt < retryLimit) {
                                     retryDelayMs = backoff(attempt++) // compute delay
                                 } else {
                                     throw t
@@ -189,7 +190,7 @@ class Cannon {
                     when (cause) {
                         is PotatoCannonException -> throw cause
                         is AssertionError -> throw cause
-                        else -> throw ExecutionFailureException(cause)
+                        else -> throw RequestExecutionException(cause)
                     }
                 }
             }
@@ -249,7 +250,7 @@ class Cannon {
         val builder = try {
             HttpRequest.newBuilder().uri(URI.create(fullUrl))
         } catch (t: Throwable) {
-            throw ExecutionFailureException(t)
+            throw RequestPreparationException(t)
         }
 
         allHeaders.forEach { (key, values) ->
@@ -257,7 +258,7 @@ class Cannon {
                 try {
                     builder.header(key, value)
                 } catch (t: Throwable) {
-                    throw ExecutionFailureException(t)
+                    throw RequestPreparationException(t)
                 }
             }
         }
@@ -292,7 +293,7 @@ class Cannon {
         val response = try {
             client.send(request, BodyHandlers.ofByteArray())
         } catch (t: Throwable) {
-            throw RequestSendingException(t, currentAttempt + 1)
+            throw RequestSendingFailureException(t, currentAttempt + 1)
         }
         val duration = System.currentTimeMillis() - start
 

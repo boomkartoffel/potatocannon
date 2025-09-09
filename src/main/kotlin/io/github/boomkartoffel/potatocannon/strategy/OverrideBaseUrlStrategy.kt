@@ -1,4 +1,6 @@
 package io.github.boomkartoffel.potatocannon.strategy
+import io.github.boomkartoffel.potatocannon.potato.Potato
+import io.github.boomkartoffel.potatocannon.cannon.Cannon
 
 /**
  * Overrides the base URL for a specific [Potato].
@@ -8,7 +10,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  * before executing the main requests.
  *
  * If multiple [OverrideBaseUrl] settings are provided, the **last one** is used.
- * This does not affect other potatoes fired by the same cannon.
+ * This does not affect other [Potato] fired by the same [Cannon].
  *
  * @property url The alternate base URL to use instead of the cannon's default.
  * @since 0.1.0

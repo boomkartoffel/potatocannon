@@ -4,8 +4,8 @@ import io.github.boomkartoffel.potatocannon.strategy.BasicAuth
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
-import io.github.boomkartoffel.potatocannon.exception.ExecutionFailureException
-import io.github.boomkartoffel.potatocannon.exception.RequestSendingException
+import io.github.boomkartoffel.potatocannon.exception.RequestPreparationException
+import io.github.boomkartoffel.potatocannon.exception.RequestSendingFailureException
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.strategy.ContentType
@@ -191,10 +191,10 @@ class PotatoCannonTest {
 
         val cannon = baseCannon.withFireMode(FireMode.SEQUENTIAL)
 
-        shouldThrow<ExecutionFailureException> {
+        shouldThrow<RequestPreparationException> {
             cannon.fire(illegalUri)
         }
-        shouldThrow<ExecutionFailureException> {
+        shouldThrow<RequestPreparationException> {
             cannon.fire(illegalHeader)
         }
     }
@@ -207,7 +207,7 @@ class PotatoCannonTest {
             OverrideBaseUrl("http://127.0.0.1:9999")
         )
 
-        shouldThrow<RequestSendingException> {
+        shouldThrow<RequestSendingFailureException> {
             baseCannon
                 .addSettings(RetryLimit(5))
                 .fire(nonExistingBase)
@@ -224,7 +224,7 @@ class PotatoCannonTest {
             RequestTimeout.of(100)
         )
 
-        shouldThrow<RequestSendingException> {
+        shouldThrow<RequestSendingFailureException> {
             baseCannon
                 .fire(timeoutPotato)
         }.message shouldBe "Failed to send request within 6 attempts"
