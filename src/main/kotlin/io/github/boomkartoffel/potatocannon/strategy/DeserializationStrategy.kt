@@ -3,7 +3,7 @@ import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
 
 
 /**
- * Configurations that influence how the response is deserialized.
+ * Settings that influence how the response is deserialized.
  *
  * These are [CannonSetting]s, so they apply globally to the whole cannon run,
  * unless overridden by [PotatoSetting] at the request level.

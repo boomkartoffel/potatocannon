@@ -27,7 +27,7 @@ The Potato Cannon allows teams to define what the system **should do**, not how 
 ## What?
 
 - **Potatoes**: Define individual HTTP requests and their expected behavior
-- **Cannons**: Fire one or more potatoes, optionally setting configuration that apply to all requests
+- **Cannons**: Fire one or more potatoes, optionally settings that apply to all requests
 - **Fire Modes**: Support for sequential and parallel execution
 - **Verifications**: Lambda-based assertions that are performed on request results
 - **Request/Response Support**: Works with text or binary bodies
@@ -45,7 +45,7 @@ This framework is built to test **what your APIs deliver**, not how they are bui
 ```kotlin
 val cannon = Cannon(
     baseUrl = "http://localhost:8080",
-    configuration = listOf(
+    settings = listOf(
         BasicAuth("user", "pass")
     )
 )
@@ -54,7 +54,7 @@ val potato = Potato(
     method = HttpMethod.POST,
     path = "/test",
     body = TextBody("{ \"message\": \"hi\" }"),
-    configuration = listOf(
+    settings = listOf(
         ContentType.JSON,
         ResultVerification("Status Code is 200 and return value is Hello") { result ->
             assertEquals(200, result.statusCode)

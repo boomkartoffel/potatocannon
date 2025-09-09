@@ -186,8 +186,8 @@ class PotatoCannonTest {
             method = HttpMethod.GET, path = "/test"
         )
 
-        val illegalUri = basePotato.addConfiguration(OverrideBaseUrl("127.0.0.1"))
-        val illegalHeader = basePotato.addConfiguration(CustomHeader("Invalid:Header\n", "value"))
+        val illegalUri = basePotato.addSettings(OverrideBaseUrl("127.0.0.1"))
+        val illegalHeader = basePotato.addSettings(CustomHeader("Invalid:Header\n", "value"))
 
         val cannon = baseCannon.withFireMode(FireMode.SEQUENTIAL)
 
@@ -209,7 +209,7 @@ class PotatoCannonTest {
 
         shouldThrow<RequestSendingException> {
             baseCannon
-                .addConfiguration(RetryLimit(5))
+                .addSettings(RetryLimit(5))
                 .fire(nonExistingBase)
         }.message shouldBe "Failed to send request within 6 attempts"
 
@@ -256,7 +256,7 @@ class PotatoCannonTest {
         )
 
         baseCannon
-            .addConfiguration(expect4Attempts)
+            .addSettings(expect4Attempts)
             .withFireMode(FireMode.SEQUENTIAL)
             .fire(timeoutPotato1, timeoutPotato2)
     }
@@ -286,7 +286,7 @@ class PotatoCannonTest {
         val start = System.currentTimeMillis()
 
         baseCannon
-            .addConfiguration(expect4Attempts)
+            .addSettings(expect4Attempts)
             .withFireMode(FireMode.SEQUENTIAL)
             .fire(timeoutPotato)
 
@@ -323,8 +323,8 @@ class PotatoCannonTest {
         )
 
         baseCannon
-            .addConfiguration(expect4Attempts)
-            .addConfiguration(ConcurrencyLimit(1))
+            .addSettings(expect4Attempts)
+            .addSettings(ConcurrencyLimit(1))
             .withFireMode(FireMode.PARALLEL)
             .fire(timeoutPotato1, timeoutPotato2)
     }
@@ -345,17 +345,17 @@ class PotatoCannonTest {
         )
 
         shouldNotThrow<ResponseBodyMissingException> {
-            baseCannon.fire(basePotato.addConfiguration(checkBodyNull))
+            baseCannon.fire(basePotato.addSettings(checkBodyNull))
         }
 
         shouldThrow<ResponseBodyMissingException> {
-            baseCannon.fire(basePotato.addConfiguration(tryConversionOnNullBodyFails))
+            baseCannon.fire(basePotato.addSettings(tryConversionOnNullBodyFails))
         }
     }
 
 
     @Test
-    fun `Log commentary appears first for cannon log comments and then for potato comments in order of configuration`() {
+    fun `Log commentary appears first for cannon log comments and then for potato comments in order of settings`() {
         val potato = Potato(
             method = HttpMethod.GET,
             path = "/test",
@@ -364,7 +364,7 @@ class PotatoCannonTest {
         )
 
         baseCannon
-            .addConfiguration(
+            .addSettings(
                 LogCommentary("First Commentary - Cannon"),
                 LogCommentary("Second Commentary - Cannon")
             )
@@ -385,7 +385,7 @@ class PotatoCannonTest {
 
         val start = System.currentTimeMillis()
         baseCannon
-            .addConfiguration(FireMode.SEQUENTIAL)
+            .addSettings(FireMode.SEQUENTIAL)
             .fire(potatoes)
         val end = System.currentTimeMillis()
         val durationMs = end - start
@@ -428,7 +428,7 @@ class PotatoCannonTest {
     @Test
     fun `POST request from readme`() {
         val cannon = baseCannon
-            .addConfiguration(
+            .addSettings(
                 listOf(
                     BasicAuth("user", "pass")
                 )
@@ -473,7 +473,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST, path = "/create-user", expect
         )
 
-        val potatoList = potatoSingleObject.withPath("/create-user-list").withConfiguration(expectList)
+        val potatoList = potatoSingleObject.withPath("/create-user-list").withSettings(expectList)
 
         baseCannon.fire(potatoSingleObject, potatoList)
     }
@@ -503,7 +503,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST, path = "/create-user-xml", expectSingle
         )
 
-        val potatoList = potatoSingle.withPath("/create-user-xml-list").withConfiguration(expectList)
+        val potatoList = potatoSingle.withPath("/create-user-xml-list").withSettings(expectList)
 
 
         baseCannon.fire(potatoSingle, potatoList)
@@ -528,7 +528,7 @@ class PotatoCannonTest {
         shouldThrow<DeserializationFailureException> {
             baseCannon.fire(
                 potato
-                    .addConfiguration(failMapping)
+                    .addSettings(failMapping)
             )
         }
 
@@ -537,7 +537,7 @@ class PotatoCannonTest {
                 //default is ignore
                 potato,
                 potato
-                    .addConfiguration(ignoreMapping)
+                    .addSettings(ignoreMapping)
             )
         }
 
@@ -565,20 +565,20 @@ class PotatoCannonTest {
                 //default is strict
                 partialObjectPotato,
                 partialObjectPotato
-                    .addConfiguration(strictNullCheck),
+                    .addSettings(strictNullCheck),
                 //default is strict
                 fullObjectPotato,
                 fullObjectPotato
-                    .addConfiguration(strictNullCheck)
+                    .addSettings(strictNullCheck)
             )
         }
 
         shouldNotThrow<DeserializationFailureException> {
             baseCannon.fire(
                 partialObjectPotato
-                    .addConfiguration(relaxNullCheck),
+                    .addSettings(relaxNullCheck),
                 fullObjectPotato
-                    .addConfiguration(relaxNullCheck)
+                    .addSettings(relaxNullCheck)
             )
         }
 
@@ -628,7 +628,7 @@ class PotatoCannonTest {
         shouldNotThrow<DeserializationFailureException> {
             baseCannon.fire(
                 potato
-                    .addConfiguration(CaseInsensitiveProperties)
+                    .addSettings(CaseInsensitiveProperties)
             )
         }
     }
@@ -657,7 +657,7 @@ class PotatoCannonTest {
         shouldNotThrow<DeserializationFailureException> {
             baseCannon.fire(
                 potato
-                    .addConfiguration(CaseInsensitiveEnums)
+                    .addSettings(CaseInsensitiveEnums)
             )
         }
     }
@@ -685,7 +685,7 @@ class PotatoCannonTest {
         shouldNotThrow<DeserializationFailureException> {
             baseCannon.fire(
                 potato
-                    .addConfiguration(AcceptEmptyStringAsNullObject)
+                    .addSettings(AcceptEmptyStringAsNullObject)
             )
         }
     }
@@ -714,14 +714,14 @@ class PotatoCannonTest {
 
         val potatoXml = potatoJson
             .withPath("/empty-enum")
-            .withConfiguration(typeXmlHeader, checkXml)
+            .withSettings(typeXmlHeader, checkXml)
 
         val potatoWithUnknownValueJson = potatoJson
             .withPath("/empty-enum-and-not-matched")
 
         val potatoWithUnknownValuesXml = potatoXml
             .withPath("/empty-enum-and-not-matched")
-            .withConfiguration(typeXmlHeader, checkXml)
+            .withSettings(typeXmlHeader, checkXml)
 
         //default is disabled
         shouldThrow<DeserializationFailureException> {
@@ -740,7 +740,7 @@ class PotatoCannonTest {
 
         shouldNotThrow<DeserializationFailureException> {
             baseCannon
-                .addConfiguration(UnknownEnumAsDefault)
+                .addSettings(UnknownEnumAsDefault)
                 .fire(
                     potatoJson,
                     potatoWithUnknownValueJson,
@@ -807,7 +807,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST, path = "/create-user-custom", expectSingle
         )
 
-        val potatoList = potatoSingle.withPath("/create-user-custom-list").withConfiguration(expectList)
+        val potatoList = potatoSingle.withPath("/create-user-custom-list").withSettings(expectList)
 
 
         baseCannon.fire(potatoSingle, potatoList)
@@ -865,7 +865,7 @@ class PotatoCannonTest {
         )
 
         val baseLoggingPotatoes = Logging.values().map { logging ->
-            basePotato.withConfiguration(
+            basePotato.withSettings(
                 headers + logging + Expectation(
                     "This is logging: $logging", {
 
@@ -910,7 +910,7 @@ class PotatoCannonTest {
         }
 
         val baseLoggingPotatoesWithExcludes = logExcludeCombinations.map { logExcludes ->
-            basePotato.withConfiguration(
+            basePotato.withSettings(
                 headers + Logging.FULL + logExcludes + Expectation(
                     "This is FULL logging with excludes: $logExcludes", {
                         println("↓\uFE0F This is FULL logging with excludes: $logExcludes")
@@ -944,7 +944,7 @@ class PotatoCannonTest {
                 })
         )
 
-        val cannon = baseCannon.addConfiguration(
+        val cannon = baseCannon.addSettings(
             listOf(
                 BasicAuth(
                     username = "user", password = "password"
@@ -974,7 +974,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST, path = "/test", is200Expectation, isHelloResponseExpectation
         )
 
-        val overrideBaseUrlPotato = defaultPotato.withConfiguration(
+        val overrideBaseUrlPotato = defaultPotato.withSettings(
             OverrideBaseUrl(alternateBeeceptorUrl), verifyBeceptorUrl, verifyNotLocalHost
         )
 
@@ -1034,7 +1034,7 @@ class PotatoCannonTest {
             result.fullUrl shouldContain "test?+++++++++++query=value+with+spaces+%26+special+characters+like+%3F+and+%3D&query2=value2+with+%3C+or+%C3%9C%C3%96%C3%84%3E+special+characters"
         }
 
-        baseCannon.fire(potato.addConfiguration(expect))
+        baseCannon.fire(potato.addSettings(expect))
     }
 
     @Test
@@ -1071,7 +1071,7 @@ class PotatoCannonTest {
         val result = baseCannon.fire(firstPotato)
 
         baseCannon.fire(
-            firstPotato.withPath("/second-call").addConfiguration(
+            firstPotato.withPath("/second-call").addSettings(
                 QueryParam("number", result[0].responseText() ?: "0")
             )
         )

@@ -9,8 +9,8 @@ package io.github.boomkartoffel.potatocannon.strategy
  *
  * **Ordering / precedence**
  * - All commentary entries are printed.
- * - **Cannon-level** comments are emitted first, in the order they were added to the cannon’s configuration.
- * - **Potato-level** comments are emitted next, in the order they were added to the potato’s configuration.
+ * - **Cannon-level** comments are emitted first, in the order they were added to the cannon’s settings.
+ * - **Potato-level** comments are emitted next, in the order they were added to the potato’s settings.
  * - There is no de-duplication or overriding; everything you add is shown.
  *
  * Example output line:

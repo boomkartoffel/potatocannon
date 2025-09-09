@@ -3,11 +3,11 @@ package io.github.boomkartoffel.potatocannon.strategy
 import io.github.boomkartoffel.potatocannon.result.Result
 
 /**
- * A configuration that defines how a result should be verified after a request is fired.
+ * A setting that defines how a result should be verified after a request is fired.
  *
  * Combines a [Check] with an optional human-readable [description] for logging.
  *
- * This configuration can be applied to individual Potatoes or globally to the Cannon.
+ * This setting can be applied to individual Potatoes or globally to the Cannon.
  *
  * @param check the condition that should be met by the [Result].
  * @param description an optional description of the verification. This text will be shown in the log when the verification is executed.

@@ -3,7 +3,7 @@ package io.github.boomkartoffel.potatocannon.strategy
 /**
  * Adds a query parameter to the request URL.
  *
- * This configuration can be applied to individual Potatoes or globally to the Cannon.
+ * This setting can be applied to individual Potatoes or globally to the Cannon.
  * Multiple query parameters with the same key are allowed and will be appended.
  *
  * @param key the name of the query parameter.

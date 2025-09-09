@@ -29,7 +29,7 @@ enum class FireMode : CannonSetting {
      *
      * Requests may complete in any order, depending on network conditions
      *
-     * This mode is the default if no FireMode is specified in the configuration.
+     * This mode is the default if no FireMode is specified in the settings.
      */
     PARALLEL
 }

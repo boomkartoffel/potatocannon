@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit
  * A configurable HTTP test runner that fires predefined requests ("Potatoes") against a target base URL.
  *
  * The `Cannon` supports sequential and parallel execution modes, custom headers, logging, expectations,
- * and other reusable configuration strategies. Designed for functional testing, stress testing, or
+ * and other reusable setting strategies. Designed for functional testing, stress testing, or
  * automation of REST-like APIs.
  *
  * @property baseUrl The root URL used to resolve all relative request paths.
@@ -54,41 +54,41 @@ class Cannon {
 
     constructor(baseUrl: String) : this(baseUrl, listOf())
 
-    constructor(baseUrl: String, vararg configuration: CannonSetting) : this(baseUrl, configuration.toList())
+    constructor(baseUrl: String, vararg settings: CannonSetting) : this(baseUrl, settings.toList())
 
-    constructor(baseUrl: String, configuration: List<CannonSetting>) {
+    constructor(baseUrl: String, settings: List<CannonSetting>) {
         this.baseUrl = baseUrl
-        this.settings = configuration
+        this.settings = settings
         this.client = HttpClient.newHttpClient()
     }
 
     fun withFireMode(mode: FireMode): Cannon {
-        return addConfiguration(mode)
+        return addSettings(mode)
     }
 
     /**
-     * Returns a new `Cannon` instance with additional configuration strategies appended.
+     * Returns a new `Cannon` instance with additional [CannonSetting] strategies appended.
      *
-     * This does not mutate the original `Cannon` but returns a new one with combined configuration.
+     * This does not mutate the original `Cannon` but returns a new one with combined [CannonSetting].
      *
-     * @param additionalConfiguration The new configuration strategies to add.
-     * @return A new `Cannon` with extended configuration.
+     * @param additionalSettings The new [CannonSetting] strategies to add.
+     * @return A new `Cannon` with extended [CannonSetting].
      * @since 0.1.0
      */
-    fun addConfiguration(vararg additionalConfiguration: CannonSetting): Cannon =
-        this.addConfiguration(additionalConfiguration.toList())
+    fun addSettings(vararg additionalSettings: CannonSetting): Cannon =
+        this.addSettings(additionalSettings.toList())
 
     /**
-     * Returns a new `Cannon` instance with additional configuration strategies appended. This means that strategies like [FireMode], which resolve to the last one trumping the previous ones, will be applied.
+     * Returns a new `Cannon` instance with additional [CannonSetting] strategies appended. This means that strategies like [FireMode], which resolve to the last one trumping the previous ones, will be applied.
      *
-     * This does not mutate the original `Cannon` but returns a new one with combined configuration.
+     * This does not mutate the original `Cannon` but returns a new one with combined [CannonSetting].
      *
-     * @param additionalConfiguration The new configuration strategies to add.
-     * @return A new `Cannon` with extended configuration.
+     * @param additionalSettings The new [CannonSetting] strategies to add.
+     * @return A new `Cannon` with extended [CannonSetting].
      * @since 0.1.0
      */
-    fun addConfiguration(additionalConfiguration: List<CannonSetting>): Cannon =
-        Cannon(baseUrl, settings + additionalConfiguration)
+    fun addSettings(additionalSettings: List<CannonSetting>): Cannon =
+        Cannon(baseUrl, settings + additionalSettings)
 
     /**
      * Fires the givens single or multiple [Potato].
@@ -218,9 +218,9 @@ class Cannon {
 
         val allQueryParams = mutableMapOf<String, List<String>>()
 
-        val configs = settings + potato.settings
+        val allSettings = settings + potato.settings
 
-        configs
+        allSettings
             .filterIsInstance<QueryParam>()
             .forEach { it.apply(allQueryParams) }
 
@@ -242,7 +242,7 @@ class Cannon {
 
         val allHeaders = mutableMapOf<String, List<String>>()
 
-        configs
+        allSettings
             .filterIsInstance<HeaderStrategy>()
             .forEach { it.apply(allHeaders) }
 
@@ -262,7 +262,7 @@ class Cannon {
             }
         }
 
-        val timeout = configs
+        val timeout = allSettings
             .filterIsInstance<RequestTimeout>()
             .lastOrNull()?.durationMillis ?: RequestTimeout.DEFAULT
 
@@ -274,16 +274,16 @@ class Cannon {
             null -> builder.method(potato.method.name, BodyPublishers.noBody()).build()
         }
 
-        val baseLogging = configs
+        val baseLogging = allSettings
             .filterIsInstance<Logging>()
             .lastOrNull() ?: Logging.FULL
 
-        val logExcludes = configs
+        val logExcludes = allSettings
             .filterIsInstance<LogExclude>()
             .toSet()
 
-        val expectations = configs
-            .filterIsInstance<Expectation>() + configs
+        val expectations = allSettings
+            .filterIsInstance<Expectation>() + allSettings
             .filterIsInstance<Check>()
             .map { Expectation(it) }
 
@@ -296,7 +296,7 @@ class Cannon {
         }
         val duration = System.currentTimeMillis() - start
 
-        val deserializationStrategies = configs
+        val deserializationStrategies = allSettings
             .filterIsInstance<DeserializationStrategy>()
 
         val result = Result(
@@ -315,7 +315,7 @@ class Cannon {
         val expectationResults = expectations
             .map { it.verify(result) }
 
-        val logCommentary = configs
+        val logCommentary = allSettings
             .filterIsInstance<LogCommentary>()
 
         result.log(baseLogging, logExcludes, expectationResults, logCommentary)

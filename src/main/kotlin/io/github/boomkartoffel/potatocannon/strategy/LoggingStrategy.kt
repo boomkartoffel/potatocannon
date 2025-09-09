@@ -3,8 +3,8 @@ package io.github.boomkartoffel.potatocannon.strategy
 /**
  * Defines the verbosity level of logging.
  *
- * This configuration can be applied to either individual Potatoes or the entire Cannon.
- * When multiple logging configurations are applied, the last one takes precedence.
+ * This setting can be applied to either individual Potatoes or the entire Cannon.
+ * When multiple logging settings are applied, the last one takes precedence.
  *
  * The default logging level is [FULL], which logs all request and response details.
  *
