@@ -10,6 +10,18 @@ private val defaultCharset = Charsets.UTF_8
 private val defaultFormat = DeserializationFormat.JSON
 private const val contentTypeHeaderName = "content-type"
 
+/**
+ * Immutable view of HTTP headers with case-insensitive lookup.
+ *
+ * Header names are normalized to lowercase on construction, so
+ * retrieval with [get] does not depend on the original casing.
+ *
+ * Typical use cases:
+ * - Accessing response headers returned by the server
+ * - Inspecting request headers after they have been applied
+ *
+ * @since 0.1.0
+ */
 class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
 
     private val normalized = rawHeaders.mapKeys { it.key.lowercase() }
@@ -30,8 +42,8 @@ class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
  * @property fullUrl The full URL used in the request, including query parameters.
  * @property statusCode The HTTP response status code (e.g., 200, 404).
  * @property responseBody The raw response body as a [ByteArray], or null if the request had no body.
- * @property requestHeaders The headers sent with the request.
- * @property responseHeaders The headers received in the response.
+ * @property requestHeaders The [Headers] sent with the request.
+ * @property responseHeaders The [Headers] received in the response.
  * @property queryParams The query parameters used in the request.
  * @property durationMillis Total time in milliseconds taken to execute the request.
  * @property attempts The number of attempts it took to successfully send the request.
