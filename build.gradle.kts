@@ -1,16 +1,22 @@
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import com.github.jengelman.gradle.plugins.shadow.ShadowExtension
+import org.gradle.api.publish.maven.MavenPublication
+
 
 plugins {
     kotlin("jvm") version "1.7.22"
     kotlin("plugin.serialization") version "1.7.22"
     id("com.vanniktech.maven.publish") version "0.25.3"
+    id("org.jetbrains.dokka") version "1.9.20"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
+
 }
 
 group = "io.github.boomkartoffel"
 version = "0.1.0-alpha2"
 
-//val ktorVersion = "3.2.0"
 val ktorVersion = "2.1.3"
 val jacksonVersion = "2.14.3"
 val kotlinxSerializationVersion = "1.4.1"
@@ -23,10 +29,19 @@ repositories {
 }
 
 dependencies {
-    implementation("com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:${jacksonVersion}")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml:${jacksonVersion}")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jacksonVersion}")
+//    implementation("com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}")
+//    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:${jacksonVersion}")
+//    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml:${jacksonVersion}")
+//    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jacksonVersion}")
+
+    // ---- Jackson via BOM (no versions on modules) ----
+    implementation(platform("com.fasterxml.jackson:jackson-bom:$jacksonVersion"))
+    implementation("com.fasterxml.jackson.core:jackson-databind")
+    implementation("com.fasterxml.jackson.core:jackson-core")
+    implementation("com.fasterxml.jackson.core:jackson-annotations")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
     testImplementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
     testImplementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
@@ -73,6 +88,36 @@ tasks.withType<KotlinCompile>().configureEach {
     }
 }
 
+/* -------- Shadow configuration: make shaded JAR the default artifact -------- */
+tasks.named<ShadowJar>("shadowJar") {
+    // Publish shaded jar as the main artifact (no classifier)
+    archiveClassifier.set("")
+
+    // Relocate Jackson so it cannot clash with the app’s Jackson
+    relocate("com.fasterxml.jackson", "io.github.boomkartoffel.shaded.com.fasterxml.jackson")
+
+    // Merge META-INF/services so jackson-module-kotlin is auto-discovered
+    mergeServiceFiles()
+
+    // avoid signature warnings
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+}
+
+/*
+ * Wire Shadow into the publications that the Vanniktech plugin creates.
+ * This swaps the published artifact(s) to use the shaded jar, without needing a 'shadow' component.
+ */
+afterEvaluate {
+    extensions.getByType(PublishingExtension::class.java).publications
+        .withType(MavenPublication::class.java)
+        .configureEach {
+            extensions.getByType(ShadowExtension::class.java).component(this)
+        }
+}
+
+// Ensure the shaded jar is built by default and the plain jar isn't published by accident.
+tasks.named("build") { dependsOn(tasks.named("shadowJar")) }
+tasks.named<Jar>("jar") { enabled = false }
 
 // (Optional, harmless in Kotlin-only projects)
 java {
@@ -110,5 +155,17 @@ extensions.configure<MavenPublishBaseExtension> {
             url.set("https://github.com/boomkartoffel/PotatoCannon/issues")
         }
         inceptionYear.set("2025")
+    }
+}
+
+
+tasks.withType<org.jetbrains.dokka.gradle.DokkaTask>().configureEach {
+    dokkaSourceSets.configureEach {
+        // includeNonPublic.set(true)  // (v1) if you want internal/private
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl.set(uri("https://github.com/your-org/potato-cannon/tree/main/src/main/kotlin").toURL())
+            remoteLineSuffix.set("#L")
+        }
     }
 }
