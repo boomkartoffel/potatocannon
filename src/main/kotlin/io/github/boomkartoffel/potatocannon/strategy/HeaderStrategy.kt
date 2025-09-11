@@ -24,21 +24,67 @@ sealed interface HeaderStrategy : CannonSetting, PotatoSetting {
  * @since 0.1.0
  */
 enum class ContentType(val mime: String) : HeaderStrategy {
+    // Application
     JSON("application/json"),
     XML("application/xml"),
     FORM_URLENCODED("application/x-www-form-urlencoded"),
-    TEXT_PLAIN("text/plain"),
-    MULTIPART_FORM_DATA("multipart/form-data"),
     JAVASCRIPT("application/javascript"),
     OCTET_STREAM("application/octet-stream"),
+    RTF("application/rtf"),
     PDF("application/pdf"),
     ZIP("application/zip"),
+    GZIP("application/gzip"),
+    TAR("application/x-tar"),
+    SEVEN_ZIP("application/x-7z-compressed"),
+    BZIP2("application/x-bzip2"),
+    NDJSON("application/x-ndjson"),
+    YAML("application/yaml"),
+    JSON_LD("application/ld+json"),
+    EPUB("application/epub+zip"),
+    XHTML("application/xhtml+xml"),
+    MANIFEST("application/manifest+json"),
+    PROBLEM_JSON("application/problem+json"),
+
+    // Text
+    TEXT_PLAIN("text/plain"),
+    EVENT_STREAM("text/event-stream"),
     CSV("text/csv"),
     HTML("text/html"),
-    RTF("application/rtf"),
-    EVENT_STREAM("text/event-stream"),
-    NDJSON("application/x-ndjson"),
-    YAML("application/x-yaml");
+    CSS("text/css"),
+    MARKDOWN("text/markdown"),
+
+    // Data
+    MULTIPART_FORM_DATA("multipart/form-data"),
+
+    // Images
+    PNG("image/png"),
+    JPEG("image/jpeg"),
+    JPG("image/jpg"), // alias (non-standard but seen)
+    GIF("image/gif"),
+    SVG("image/svg+xml"),
+    AVIF("image/avif"),
+    BMP("image/bmp"),
+    ICON("image/vnd.microsoft.icon"),
+    ICON_X("image/x-icon"), // alias used by some servers
+
+    // Audio
+    MP3("audio/mpeg"),
+    WAV("audio/wav"),
+    WAV_X("audio/x-wav"), // alias used by some servers
+
+    // Video
+    WEBM_VIDEO("video/webm"),
+    MP4_VIDEO("video/mp4"),
+
+    // Font
+    WOFF("font/woff"),
+    WOFF2("font/woff2"),
+    TTF("font/ttf"),
+    OTF("font/otf"),
+
+    // Aliases / legacy (optional)
+    TEXT_JAVASCRIPT("text/javascript"), // deprecated alias
+    YAML_X("application/x-yaml"); // non-standard alias, still seen
 
     override fun apply(headers: MutableMap<String, List<String>>) {
         headers["Content-Type"] = listOf(mime)

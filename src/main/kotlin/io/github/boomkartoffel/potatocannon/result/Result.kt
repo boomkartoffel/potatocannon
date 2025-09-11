@@ -36,7 +36,7 @@ class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
 /**
  * Represents the outcome of firing a single [Potato] request.
  *
- * Contains full details about the request, response, and any exception that occurred.
+ * Contains full details about the request, response, infos about the request execution, the used [Potato], and helper methods.
  *
  * @property potato The original [Potato] that was fired.
  * @property fullUrl The full URL used in the request, including query parameters.

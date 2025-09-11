@@ -1,6 +1,7 @@
 package io.github.boomkartoffel.potatocannon.exception
 import java.util.concurrent.CancellationException
 import java.lang.InterruptedException
+import io.github.boomkartoffel.potatocannon.result.Result
 
 sealed class PotatoCannonException(
     message: String,
@@ -10,7 +11,7 @@ sealed class PotatoCannonException(
 /**
  * Thrown when a response expected to contain a body was empty or absent.
  **
- * Usually emitted by [io.github.boomkartoffel.potatocannon.result.Result.bodyAsObject] / [io.github.boomkartoffel.potatocannon.result.Result.bodyAsList] before parsing.
+ * Usually emitted by [Result.bodyAsObject] / [Result.bodyAsList] before parsing.
  *
  * @since 0.1.0
  */
@@ -38,7 +39,6 @@ class DeserializationFailureException internal constructor(
  * computation to complete.
  *
  *This exception is only created when awaiting the result fails due to:
- *
  * - [CancellationException] — the computation was cancelled
  * - [InterruptedException] — the waiting thread was interrupted
  *

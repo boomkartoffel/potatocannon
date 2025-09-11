@@ -429,9 +429,7 @@ class PotatoCannonTest {
     fun `POST request from readme`() {
         val cannon = baseCannon
             .addSettings(
-                listOf(
-                    BasicAuth("user", "pass")
-                )
+                BasicAuth("user", "pass")
             )
 
         val potato = Potato(
@@ -439,12 +437,12 @@ class PotatoCannonTest {
             path = "/test",
             body = TextBody("{ \"message\": \"hi\" }"),
             settings = listOf(
-                ContentType.JSON, Expectation("Status Code is 200 and return value is Hello") { result ->
+                ContentType.JSON,
+                Expectation("Status Code is 200 and return value is Hello") { result ->
                     assertEquals(200, result.statusCode)
                     assertEquals("Hello", result.responseText())
                 })
         )
-
 
         cannon.fire(potato)
     }

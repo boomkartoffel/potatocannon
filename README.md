@@ -39,28 +39,46 @@ The Potato Cannon allows teams to define what the system **should do**, not how 
 
 This framework is built to test **what your APIs deliver**, not how they are built - enabling stable, expressive test suites that support continuous refactoring and iteration.
 
-## How?
 
+## How to install
+
+Add Potato Cannon as a **test dependency** in your project.
+
+### Maven
+
+```xml
+<dependency>
+  <groupId>io.github.boomkartoffel</groupId>
+  <artifactId>potato-cannon</artifactId>
+  <version>0.1.0-alpha</version>
+  <scope>test</scope>
+</dependency>
+```
+
+### Gradle
+
+```gradle
+testImplementation("io.github.boomkartoffel:potato-cannon:0.1.0-alpha")
+```
+
+## How to use
 
 ```kotlin
-val cannon = Cannon(
-    baseUrl = "http://localhost:8080",
-    settings = listOf(
-        BasicAuth("user", "pass")
+val cannon = baseCannon
+    .addSettings(
+      BasicAuth("user", "pass")
     )
-)
 
 val potato = Potato(
     method = HttpMethod.POST,
     path = "/test",
     body = TextBody("{ \"message\": \"hi\" }"),
     settings = listOf(
-        ContentType.JSON,
-        ResultVerification("Status Code is 200 and return value is Hello") { result ->
-            assertEquals(200, result.statusCode)
-            assertEquals("Hello", result.responseText())
-    }
-  )
+      ContentType.JSON,
+      Expectation("Status Code is 200 and return value is Hello") { result ->
+        assertEquals(200, result.statusCode)
+        assertEquals("Hello", result.responseText())
+      })
 )
 
 cannon.fire(potato)
@@ -90,9 +108,9 @@ The Potato Cannon instance can be reused across multiple tests, allowing you to 
 Furthermore, you can reuse verifications by defining them once on a global level, which can be applied to multiple potatoes.
 
 ```kotlin
-    private val is200Expectation = Expectation("Response is 200 OK") { result ->
-                result.statusCode shouldBe 200
-}
+private val is200Expectation = Expectation("Response is 200 OK") { result ->
+            result.statusCode shouldBe 200
+            }
 ```
 This allows you to rigidly define expectations without bloating each test with repetitive code.
 
@@ -126,6 +144,13 @@ The output of the Potato Cannon is structured and clear, making it easy to under
 
 
 ```
+
+## Versioning
+
+Potato Cannon follows [Semantic Versioning](https://semver.org/).
+
+See [CHANGELOG.md](./CHANGELOG.md) for details on past releases.
+
 
 ### Project Status
 
