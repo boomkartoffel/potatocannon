@@ -21,7 +21,6 @@ enum class Logging : CannonSetting, PotatoSetting {
      * - HTTP method and path
      * - Status code
      * - Execution time
-     * - Any associated error
      */
     BASIC,
 

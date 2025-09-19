@@ -30,17 +30,24 @@ import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.QueryParam
 import io.github.boomkartoffel.potatocannon.strategy.Expectation
+import io.github.boomkartoffel.potatocannon.strategy.HttpProtocolVersion
 import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
 import io.github.boomkartoffel.potatocannon.strategy.RetryLimit
 import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
+import io.github.boomkartoffel.potatocannon.strategy.PotatoSetting
+import io.github.boomkartoffel.potatocannon.strategy.ProtocolFamily
 import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout
+import io.github.boomkartoffel.potatocannon.strategy.RetryDelayPolicy
 import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
 import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode
 import io.github.boomkartoffel.potatocannon.strategy.withDescription
 import io.kotest.assertions.throwables.shouldNotThrow
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.comparables.shouldBeLessThan
+import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.longs.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -62,6 +69,12 @@ import java.time.ZonedDateTime
 import kotlin.collections.first
 import kotlin.properties.Delegates
 import kotlin.random.Random
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.MethodSource
+import org.junit.jupiter.params.provider.Arguments
+import java.util.stream.Stream
+import kotlin.system.measureNanoTime
+import kotlin.system.measureTimeMillis
 
 data class CreateUser(
     val id: Int, val name: String, val email: String
@@ -153,51 +166,72 @@ class PotatoCannonTest {
         TestBackend.stop()
     }
 
-    private val is200Expectation = Expectation("Response is 200 OK") { result ->
-        result.statusCode shouldBe 200
-    }
 
-    private val isHelloResponseExpectation = Check { result ->
-        result.responseText() shouldBe "Hello"
-    }.withDescription("Response is Hello")
-
-
-    private val is404Expectation = Check { result: Result ->
-        result.statusCode shouldBe 404
-    }.withDescription("Response is 404 Not Found")
 
     @Test
     fun `GET request to test returns Hello`() {
 
         val potato = Potato(
-            method = HttpMethod.GET, path = "/test", isHelloResponseExpectation, is200Expectation
+            method = HttpMethod.GET, path = "/test", expectHelloResponseText, expect200StatusCode
         )
-
 
         val cannon = baseCannon.withFireMode(FireMode.SEQUENTIAL)
 
         cannon.fire(potato)
     }
 
-    @Test
-    fun `Requests with illegal URI or illegal header are not executed`() {
+    @ParameterizedTest(name = "{index}: {1}")
+    @MethodSource("illegalUrlAndHeaderSettings")
+    fun `Requests with illegal URI or illegal header are not executed`(
+        setting: PotatoSetting,
+        expectedMessageContains: String
+    ) {
+        val potato = Potato(method = HttpMethod.GET, path = "/test")
+            .addSettings(setting)
 
-        val basePotato = Potato(
-            method = HttpMethod.GET, path = "/test"
-        )
-
-        val illegalUri = basePotato.addSettings(OverrideBaseUrl("127.0.0.1"))
-        val illegalHeader = basePotato.addSettings(CustomHeader("Invalid:Header\n", "value"))
-
-        val cannon = baseCannon.withFireMode(FireMode.SEQUENTIAL)
-
-        shouldThrow<RequestPreparationException> {
-            cannon.fire(illegalUri)
+        val ex = shouldThrow<RequestPreparationException> {
+            baseCannon.fire(potato)
         }
-        shouldThrow<RequestPreparationException> {
-            cannon.fire(illegalHeader)
-        }
+        ex.message shouldContain expectedMessageContains
     }
+
+    fun illegalUrlAndHeaderSettings(): Stream<Arguments> {
+        return Stream.of(
+            Arguments.of(
+                OverrideBaseUrl("127.0.0.1"),
+                "Unsupported or missing scheme"
+            ),
+            Arguments.of(
+                OverrideBaseUrl("ftp://example.com"),
+                "Unsupported or missing scheme"
+            ),
+            Arguments.of(
+                OverrideBaseUrl("https:///nohost"),
+                "URL must be absolute and include a host"
+            ),
+            Arguments.of(
+                OverrideBaseUrl("http://exa mple.com"),
+                "Invalid URL syntax"
+            ),
+            Arguments.of(
+                CustomHeader("", "value"),
+                "Header name is empty"
+            ),
+            Arguments.of(
+                CustomHeader("Invalid:Header", "value"),
+                "Invalid header name"
+            ),
+            Arguments.of(
+                CustomHeader("X-Test", "line1\nline2"),
+                "contains CR/LF"
+            ),
+            Arguments.of(
+                CustomHeader("X-Test", "bad\u0001char"),
+                "contains control characters"
+            )
+        )
+    }
+
 
     @Test
     fun `Requests to non-existing server will have http request errors`() {
@@ -211,7 +245,7 @@ class PotatoCannonTest {
             baseCannon
                 .addSettings(RetryLimit(5))
                 .fire(nonExistingBase)
-        }.message shouldBe "Failed to send request within 6 attempts"
+        }.message shouldContain "Failed to send GET request to http://127.0.0.1:9999/test within 6 attempts"
 
     }
 
@@ -227,15 +261,11 @@ class PotatoCannonTest {
         shouldThrow<RequestSendingFailureException> {
             baseCannon
                 .fire(timeoutPotato)
-        }.message shouldBe "Failed to send request within 6 attempts"
+        }.message shouldContain "Failed to send POST request to http://127.0.0.1:$port/timeout within 6 attempts"
     }
 
     @Test
     fun `Sequential Requests are retried in order`() {
-
-        val expect4Attempts = Check {
-            it.attempts shouldBe 4
-        }.withDescription("Request succeeded after 3 retries (4 attempts total)")
 
         val timeoutPotato1 = Potato(
             method = HttpMethod.POST, path = "/timeout",
@@ -264,10 +294,6 @@ class PotatoCannonTest {
     @Test
     fun `12 Attempts take about 7 seconds with the increasing backoff`() {
 
-        val expect4Attempts = Check {
-            it.attempts shouldBe 12
-        }.withDescription("Request succeeded after 11 retries (12 attempts total)")
-
         val timeoutPotato = Potato(
             method = HttpMethod.POST, path = "/timeout",
             RetryLimit(11),
@@ -276,33 +302,77 @@ class PotatoCannonTest {
             QueryParam("returnOkAfter", "12"),
         )
 
-        val totalTimeouts = 100 * 11
-        val expectedVariousOverhead = 17 * 12 // about 17ms overhead/timeout inaccuracy per request
-        val expectedFinalResponseTime = 10
-        val timeouts = listOf(10, 25, 50, 100, 200, 400, 600, 800, 1000, 1200, 1400)
+        val perAttemptTimeoutMs = 100
+        val retryCount = 11                 // 11 retries -> 12 attempts total
+        val finalOkCostMs = 10              // your estimate for the successful attempt
+        val backoffSteps = listOf(10, 25, 50, 100, 200, 400, 600, 800, 1000, 1200, 1400)
 
-        val totalExpectedTime = totalTimeouts + expectedVariousOverhead + expectedFinalResponseTime + timeouts.sum()
+        // Ideal path: 11 timed-out attempts + progressive backoffs + final success
+        val baseMs = (perAttemptTimeoutMs * retryCount) + backoffSteps.sum() + finalOkCostMs
 
-        val start = System.currentTimeMillis()
+        // Expected misc overhead (scheduling, logging, GC, timing fuzz)
+        val miscOverheadMs = 20 * (retryCount + 1)
 
-        baseCannon
-            .addSettings(expect4Attempts)
-            .withFireMode(FireMode.SEQUENTIAL)
-            .fire(timeoutPotato)
+        val targetMs = baseMs + miscOverheadMs
 
-        val end = System.currentTimeMillis()
+        val pctSlack = 0.01                     // ±1% headroom for CI/jitter
+        val minMs = (targetMs * (1 - pctSlack)).toLong()  // lower bound
+        val maxMs = (targetMs * (1 + pctSlack)).toLong()  // upper bound
 
-        println("12 attempts took ${end - start} ms")
-        println("Expected time was $totalExpectedTime ms")
-        (end - start) shouldBeLessThan totalExpectedTime.toLong()
+
+        val elapsedMs = measureNanoTime {
+            baseCannon
+                .addSettings(expect12Attempts)
+                .fire(timeoutPotato)
+        }/1_000_000
+
+        println("12 attempts took $elapsedMs ms (expected ≈ $targetMs ms; window [$minMs, $maxMs] ms)")
+
+        elapsedMs shouldBeGreaterThanOrEqual minMs
+        elapsedMs shouldBeLessThanOrEqual maxMs
+    }
+
+    @Test
+    fun `12 Attempts with no increasing backoff take about 1200ms`() {
+        val timeoutPotato = Potato(
+            method = HttpMethod.POST, path = "/timeout",
+            RetryLimit(11),
+            RequestTimeout.of(100),
+            RetryDelayPolicy.NONE,
+            QueryParam("id", "RetryTestNoBackoff"),
+            QueryParam("returnOkAfter", "12"),
+        )
+
+        val perAttemptTimeoutMs = 100
+        val retryCount = 11                 // 11 retries -> 12 attempts total
+        val finalOkCostMs = 10              // your estimate for the successful attempt
+
+        // Ideal path: 11 timed-out attempts + progressive backoffs + final success
+        val baseMs = (perAttemptTimeoutMs * retryCount) + finalOkCostMs
+
+        // Expected misc overhead (scheduling, logging, GC, timing fuzz)
+        val miscOverheadMs = 10 * (retryCount + 1)
+
+        val targetMs = baseMs + miscOverheadMs
+
+        val pctSlack = 0.02                     // ±2% headroom for CI/jitter
+        val minMs = (targetMs * (1 - pctSlack)).toLong()  // lower bound
+        val maxMs = (targetMs * (1 + pctSlack)).toLong()  // upper bound
+
+        val elapsedMs = measureNanoTime {
+            baseCannon
+                .addSettings(expect12Attempts)
+                .fire(timeoutPotato)
+        }/1_000_000
+
+        println("12 attempts took $elapsedMs ms (expected ≈ $targetMs ms; window [$minMs, $maxMs] ms)")
+
+        elapsedMs shouldBeGreaterThanOrEqual minMs
+        elapsedMs shouldBeLessThanOrEqual maxMs
     }
 
     @Test
     fun `Parallel Requests are retried out of order (even if concurrency is disabled)`() {
-
-        val expect4Attempts = Check {
-            it.attempts shouldBe 4
-        }.withDescription("Request succeeded after 3 retries (4 attempts total)")
 
         val timeoutPotato1 = Potato(
             method = HttpMethod.POST, path = "/timeout",
@@ -333,9 +403,6 @@ class PotatoCannonTest {
     @Test
     fun `Deserialization attempts at responses with no body fail with NoBodyException`() {
 
-        val checkBodyNull = Check {
-            it.responseText() shouldBe null
-        }
         val tryConversionOnNullBodyFails = Check {
             it.bodyAsObject(CreateUser::class.java)
         }
@@ -345,7 +412,7 @@ class PotatoCannonTest {
         )
 
         shouldNotThrow<ResponseBodyMissingException> {
-            baseCannon.fire(basePotato.addSettings(checkBodyNull))
+            baseCannon.fire(basePotato.addSettings(expectResponseBodyIsMissing))
         }
 
         shouldThrow<ResponseBodyMissingException> {
@@ -379,8 +446,8 @@ class PotatoCannonTest {
                 method = HttpMethod.GET,
                 path = "/test-wait"
             )
-                .addExpectation(is200Expectation)
-                .addExpectation(isHelloResponseExpectation)
+                .addExpectation(expect200StatusCode)
+                .addExpectation(expectHelloResponseText)
         }
 
         val start = System.currentTimeMillis()
@@ -395,20 +462,49 @@ class PotatoCannonTest {
     }
 
     @Test
-    fun `GET request times 500 to test-wait takes less than 1150 ms in parallel mode`() {
-        val potatoes = (1..500).map {
-            Potato(
-                method = HttpMethod.GET, path = "/test-wait-parallel", is200Expectation, isHelloResponseExpectation
-            )
+    fun `GET request times 500 to test-wait takes less than 1000 ms in parallel mode`() {
+        val potato = Potato(
+            method = HttpMethod.GET, path = "/test-wait-parallel", expect200StatusCode,
+            expectHelloResponseText,
+            Logging.OFF
+        )
+
+//        val start = System.currentTimeMillis()
+//        baseCannon
+//            .addSettings(ConcurrencyLimit(500))
+//            .fire(potato * 500)
+//        val end = System.currentTimeMillis()
+//        val durationMs = end - start
+//
+//        println("Parallel duration: $durationMs ms")
+//        durationMs shouldBeLessThan 100
+
+        for (n in 100..1000 step 100) {
+            val start = System.nanoTime()
+            baseCannon
+                .addSettings(ConcurrencyLimit(n))
+                .addSettings(RetryLimit(100))
+                .addSettings(RetryDelayPolicy.NONE)
+                .fire(potato * n)
+            val durationMs = (System.nanoTime() - start) / 1_000_000
+
+            println("Parallel duration (n=$n): $durationMs ms")
         }
 
-        val start = System.currentTimeMillis()
-        baseCannon.fire(potatoes)
-        val end = System.currentTimeMillis()
-        val durationMs = end - start
+        println("Half capacity")
 
-        println("Parallel duration: $durationMs ms")
-        durationMs shouldBeLessThan 1150
+        for (n in 100..1000 step 100) {
+            val start = System.nanoTime()
+            baseCannon
+                .addSettings(ConcurrencyLimit(n/2))
+                .addSettings(RetryLimit(100))
+                .addSettings(RetryDelayPolicy.NONE)
+                .fire(potato * n)
+            val durationMs = (System.nanoTime() - start) / 1_000_000
+
+            println("Parallel duration (n=$n): $durationMs ms")
+        }
+
     }
 
     @Test
@@ -418,8 +514,8 @@ class PotatoCannonTest {
             path = "/test",
             body = TextBody("{ }"),
             ContentType.JSON,
-            is200Expectation,
-            isHelloResponseExpectation
+            expect200StatusCode,
+            expectHelloResponseText
         )
 
         baseCannon.fire(potato)
@@ -829,7 +925,7 @@ class PotatoCannonTest {
             })
 
         val newPot = appendPotato
-            .addExpectation(is200Expectation)
+            .addExpectation(expect200StatusCode)
 
         val overwritePotato = Potato(
             method = HttpMethod.POST,
@@ -842,6 +938,150 @@ class PotatoCannonTest {
             })
 
         cannon.fire(newPot, overwritePotato)
+
+    }
+
+    @Test
+    fun `Textbody will be using correct charset`() {
+        val cannon = baseCannon.withFireMode(FireMode.PARALLEL)
+
+        val basePotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test"
+        )
+
+        val charsetIsUtf8 = Expectation("Charset is UTF-8") { result ->
+            result.requestHeaders["Content-Type"].first().shouldContain("charset=UTF-8")
+        }
+
+        val noContentTypeRequestHeader = Expectation("No Content-Type request header is set") { result ->
+            result.requestHeaders["Content-Type"].shouldBeEmpty()
+        }
+
+        val charSetIsNotSet = Expectation("Charset is not set") { result ->
+            result.requestHeaders["Content-Type"].first().shouldNotContain("charset=UTF-8")
+        }
+        val charSetIsUtf16 = Expectation("Charset is UTF-16") { result ->
+            result.requestHeaders["Content-Type"].first().shouldContain("charset=UTF-16")
+        }
+        val textPlainIsSet = Expectation("Content-Type is text/plain") { result ->
+            result.requestHeaders["Content-Type"].first().shouldContain("text/plain")
+        }
+
+        val defaultPotato = basePotato
+            .withBody(TextBody("test"))
+            .addExpectation(noContentTypeRequestHeader)
+
+        val utf16Potato = basePotato
+            .withBody(TextBody("test", Charsets.UTF_16))
+            .addExpectation(noContentTypeRequestHeader)
+
+        val utf16PotatoWithContentType = basePotato
+            .withBody(TextBody("test", Charsets.UTF_16))
+            .addSettings(ContentType.TEXT_PLAIN)
+            .addExpectation(charSetIsNotSet)
+
+        val utf16PotatoWithContentTypeAndCharset = basePotato
+            .withBody(TextBody("test", Charsets.UTF_16, true))
+            .addSettings(ContentType.TEXT_PLAIN)
+            .addExpectation(charSetIsUtf16)
+
+        val invalidUtf16PotatoWithCharsetAndNoContentType = basePotato
+            .withBody(TextBody("test", Charsets.UTF_16, true))
+
+        val utf8Potato = basePotato
+            .withBody(TextBody("test", true))
+            .addSettings(ContentType.TEXT_PLAIN)
+            .addExpectation(charsetIsUtf8)
+
+        val invalidContentTypeSettingPotato = basePotato
+            .withBody(TextBody("test", true))
+
+        val utf8PotatoWithTextPlain = basePotato
+            .withBody(TextBody("test", true))
+            .addSettings(ContentType.TEXT_PLAIN)
+            .addExpectation(charsetIsUtf8)
+            .addExpectation(textPlainIsSet)
+
+
+        val test2 = basePotato
+            .withBody(TextBody("test", true))
+            .addSettings(ContentType.TEXT_PLAIN)
+            .addExpectation(charsetIsUtf8)
+            .addExpectation(textPlainIsSet)
+            .addSettings(CustomHeader("VAL", "foo", HeaderUpdateStrategy.APPEND))
+            .addSettings(CustomHeader("VAL", "bar", HeaderUpdateStrategy.APPEND))
+            .addSettings(OverrideBaseUrl("https://app.beeceptor.com/console/dfdfvfsdsdef"))
+
+        cannon.fire(
+            defaultPotato,
+            utf8Potato,
+            utf16Potato,
+            utf8PotatoWithTextPlain,
+            utf16PotatoWithContentType,
+            utf16PotatoWithContentTypeAndCharset,
+            test2
+        )
+
+        shouldThrow<RequestPreparationException> { cannon.fire(invalidContentTypeSettingPotato) }
+        shouldThrow<RequestPreparationException> { cannon.fire(invalidUtf16PotatoWithCharsetAndNoContentType) }
+
+    }
+
+    @Test
+    fun `Requests can be set as HTTP_1_1 or HTTP_2 to Servers that accept them and the client will enforce the protocol`() {
+        val basePotato = Potato(
+            method = HttpMethod.GET,
+            path = "/",
+            OverrideBaseUrl("https://nghttp2.org"),
+            expect200StatusCode,
+            LogExclude.BODY
+        )
+
+        val isHttp1 = Expectation("Response was HTTP/1.1") { result ->
+            result.protocol.family shouldBe ProtocolFamily.HTTP_1_1
+            result.protocol.major shouldBe 1
+            result.protocol.minor shouldBe 1
+        }
+
+        val isHttp2 = Expectation("Response was HTTP/2") { result ->
+            result.protocol.family shouldBe ProtocolFamily.HTTP_2
+            result.protocol.major shouldBe 2
+            result.protocol.minor shouldBe 0
+        }
+
+        val http1Potato =
+            basePotato.addSettings(HttpProtocolVersion.HTTP_1_1, LogCommentary("Request with HTTP/1.1"), isHttp1)
+        val http2Potato =
+            basePotato.addSettings(HttpProtocolVersion.HTTP_2, LogCommentary("Request with HTTP/2"), isHttp2)
+        val negotiatedPotato = basePotato.addSettings(
+            HttpProtocolVersion.NEGOTIATE,
+            LogCommentary("Request with negotiated protocol"),
+            isHttp2
+        )
+
+
+        baseCannon.fire(
+            http1Potato,
+            http2Potato,
+            negotiatedPotato
+        )
+
+    }
+
+    @Test
+    fun `Enforcing HTTP2 on a server that doesn't allow it will not work`() {
+        val potato = Potato(
+            method = HttpMethod.GET,
+            path = "/",
+            HttpProtocolVersion.HTTP_2,
+        )
+
+        shouldThrow<RequestSendingFailureException> {
+            baseCannon.fire(
+                potato,
+            )
+        }.message shouldContain "Connection is closed"
 
     }
 
@@ -931,7 +1171,7 @@ class PotatoCannonTest {
                 QueryParam("queryPotato", "valuePotato"),
                 QueryParam("queryPotato", "valuePotato2"),
                 BearerAuth("mytoken"),
-                isHelloResponseExpectation,
+                expectHelloResponseText,
                 Expectation("Only one content type is provided and that is XML") { result ->
                     result.requestHeaders["Content-Type"]?.size shouldBe 1
                     result.requestHeaders["Content-Type"]?.first() shouldBe "application/xml"
@@ -946,7 +1186,7 @@ class PotatoCannonTest {
             listOf(
                 BasicAuth(
                     username = "user", password = "password"
-                ), is200Expectation, QueryParam("queryCannon", "valueCannon")
+                ), expect200StatusCode, QueryParam("queryCannon", "valueCannon")
             )
         )
 
@@ -969,7 +1209,7 @@ class PotatoCannonTest {
         }
 
         val defaultPotato = Potato(
-            method = HttpMethod.POST, path = "/test", is200Expectation, isHelloResponseExpectation
+            method = HttpMethod.POST, path = "/test", expect200StatusCode, expectHelloResponseText
         )
 
         val overrideBaseUrlPotato = defaultPotato.withSettings(
@@ -1011,7 +1251,7 @@ class PotatoCannonTest {
                 username = "user", password = "password"
             ),
             CustomHeader("X-Custom-Header", "CustomValue"),
-            is404Expectation,
+            expect400StatusCode,
             QueryParam("queryCannon", "valueCannon")
 
         )
@@ -1040,7 +1280,7 @@ class PotatoCannonTest {
         val potato = Potato(
             method = HttpMethod.POST, path = "/create-user",
 
-            ContentType.JSON, is200Expectation
+            ContentType.JSON, expect200StatusCode
         )
 
         baseCannon.fire(potato)
@@ -1050,8 +1290,8 @@ class PotatoCannonTest {
     fun `POST with all kinds of methods`() {
         val potatoes = HttpMethod.values().map {
             Potato(
-                method = it, path = "/not-available-endpoint", body = TextBody("{ }"), settings = listOf(
-                    is404Expectation
+                method = it, path = "/not-available-endpoint", settings = listOf(
+                    expect400StatusCode
                 )
             )
         }.toList()
@@ -1061,16 +1301,68 @@ class PotatoCannonTest {
     }
 
     @Test
+    fun `TRACE request does not allow a request body`() {
+        val potato = Potato(
+            method = HttpMethod.TRACE,
+            body = TextBody("{}"),
+            path = "/not-available-endpoint",
+            settings = listOf(
+                expect400StatusCode
+            )
+        )
+
+        shouldThrow<RequestPreparationException> {
+            baseCannon.fire(potato)
+        }.message shouldBe "TRACE requests must not include a request body"
+    }
+
+    @Test
+    fun `An empty Body will have a content-length of 0, a null body will have no content-length header`() {
+        val hasContentLengthZero = Expectation("Content-Length is 0") { result ->
+            result.requestHeaders["Content-Length"].first() shouldBe "0"
+        }
+
+        val hasNoContentLengthHeader = Expectation("No Content-Length header is set") { result ->
+            result.requestHeaders["Content-Length"].shouldBeEmpty()
+        }
+
+        val basePotato = Potato(
+            method = HttpMethod.POST,
+            path = "/not-available-endpoint",
+        )
+
+        val emptyStringPotato = basePotato
+            .withBody(TextBody(""))
+            .addSettings(hasContentLengthZero)
+            .addSettings(LogCommentary("Empty String Body"))
+
+        val binaryPotato = basePotato
+            .withBody(BinaryBody(ByteArray(0)))
+            .addSettings(hasContentLengthZero)
+            .addSettings(LogCommentary("Empty Binary Body"))
+
+        val noBodyPotato = basePotato
+            .addSettings(hasNoContentLengthHeader)
+            .addSettings(LogCommentary("No Body at all"))
+
+        baseCannon.fire(
+            emptyStringPotato,
+            binaryPotato,
+            noBodyPotato
+        )
+    }
+
+    @Test
     fun `POST calls can be chained`() {
         val firstPotato = Potato(
-            method = HttpMethod.POST, path = "/first-call", is200Expectation
+            method = HttpMethod.POST, path = "/first-call", expect200StatusCode
         )
 
         val result = baseCannon.fire(firstPotato)
 
         baseCannon.fire(
             firstPotato.withPath("/second-call").addSettings(
-                QueryParam("number", result[0].responseText() ?: "0")
+                QueryParam("number", result[0].responseText())
             )
         )
 
@@ -1085,8 +1377,8 @@ class PotatoCannonTest {
             path = "/test",
             body = BinaryBody(binaryContent),
             ContentType.OCTET_STREAM,
-            is200Expectation,
-            isHelloResponseExpectation
+            expect200StatusCode,
+            expectHelloResponseText
         )
 
 

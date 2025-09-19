@@ -3,6 +3,8 @@ package io.github.boomkartoffel.potatocannon.strategy
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
+import io.github.boomkartoffel.potatocannon.exception.PotatoCannonException
+import io.github.boomkartoffel.potatocannon.exception.VerificationException
 
 /**
  * A setting that defines how a result should be verified after a request is fired.
@@ -29,9 +31,11 @@ class Expectation(val description: String, private val check: Check) : PotatoSet
             return ExpectationResult(this, null, false)
         } catch (ae: AssertionError) {
             return ExpectationResult(this, ae, true)
-        } catch (e: Throwable) {
-            // Catch all other exceptions to ensure we always return an ExpectationResult
+        } catch (e: PotatoCannonException) {
             return ExpectationResult(this, e, false)
+        }catch (e: Throwable) {
+            // Catch all other exceptions to ensure we always return an ExpectationResult
+            return ExpectationResult(this, VerificationException(e), false)
         }
     }
 }

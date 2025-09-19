@@ -70,6 +70,34 @@ value class RetryLimit(val count: Int) : CannonSetting, PotatoSetting {
 }
 
 /**
+ * Controls the delay between retry attempts when a request fails to send.
+ *
+ * # Strategies
+ * - [PROGRESSIVE] — Uses an increasing backoff:
+ *   initial steps of **10ms, 25ms, 50ms, 100ms, 200ms** for attempts 0..4,
+ *   then grows linearly by 200ms per additional attempt:
+ *
+ *   | **retry attempt** | 1  | 2  | 3  |  4  |  5  |  6  |  7  |  8  |  9  | …   |
+ *   |------------------:|----|----|----|-----|-----|-----|-----|-----|-----|-----|
+ *   | **delay (ms)**         | 10 | 25 | 50 | 100 | 200 | 400 | 600 | 800 | 1000| …   |
+ *
+ * - [NONE] — Disables backoff; retries happen immediately with **0ms** delay.
+ *
+ * # Notes
+ * - Combine with a [RetryLimit] to cap the number of attempts.
+ * - In parallel mode the permit is released during the sleep; in sequential mode a
+ *   single permit may be held across attempts (see executor semantics in the library).
+ *
+ */
+enum class RetryDelayPolicy : CannonSetting, PotatoSetting {
+    /** Increasing delay per attempt (see table above). */
+    PROGRESSIVE,
+
+    /** No delay between attempts (immediate retries). */
+    NONE
+}
+
+/**
  * Per-request timeout (in milliseconds) used when waiting for the request to finalize with a valid response.
  *
  * Note: This timeout only covers the time to receive the response headers. It does not include the time to read the full response body.

@@ -8,8 +8,6 @@ import io.github.boomkartoffel.potatocannon.strategy.LogExclude
 import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.ExpectationResult
 import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
-import java.io.PrintWriter
-import java.io.StringWriter
 import kotlin.collections.component1
 import kotlin.collections.component2
 
@@ -18,6 +16,10 @@ private const val ANSI_GREEN = "\u001B[32m"
 private const val ANSI_RED = "\u001B[31m"
 
 private const val exclamationSign = "⚠️"
+
+private object Json {
+    val mapper: ObjectMapper = ObjectMapper()
+}
 
 internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expectationResults: List<ExpectationResult>, logCommentary: List<LogCommentary>) {
 
@@ -60,6 +62,8 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
         builder.appendLine(requestHeaders.toMap().logFilteredHeaders(mask).joinToString("\n"))
     }
 
+    builder.appendLine("|    Protocol:       ${protocol.token}")
+
     if (potato.body != null && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
         builder.appendLine("|    Body:")
         builder.appendLine(potato.body.prettifyIndented())
@@ -84,7 +88,7 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
     }
 
 
-    if (responseBody != null && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
+    if (!responseBody.isEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
         builder.appendLine("|    Body:")
 
         builder.appendLine(responseText()?.prettifyIndented())
@@ -191,11 +195,8 @@ private fun PotatoBody.prettifyIndented(): String {
 
 private fun String?.prettifyIndented(): String {
     val prefix = "|      "
-
-    val prettyJson = prettifyJsonIfPossible()
-    if (prettyJson != null) return prettyJson.prependEachLine(prefix)
-
-    return (this ?: "null").trimIndent().prependEachLine(prefix)
+    val bodyContent = prettifyJsonIfPossible() ?: this?.trimIndent().orEmpty()
+    return if (bodyContent.isEmpty()) "" else bodyContent.prependEachLine(prefix)
 }
 
 private fun String.prependEachLine(prefix: String): String =
@@ -203,11 +204,15 @@ private fun String.prependEachLine(prefix: String): String =
 
 
 private fun String?.prettifyJsonIfPossible(): String? {
+    // Treat null/blank as “not JSON”
+    val s = this?.trim()
+    if (s.isNullOrEmpty()) return null
+
     return try {
-        val jsonNode = ObjectMapper().readTree(this)
-        ObjectMapper()
-            .writerWithDefaultPrettyPrinter()
-            .writeValueAsString(jsonNode)
+        val node = Json.mapper.readTree(s) ?: return null
+        // Only pretty-print objects/arrays; ignore scalars (including JSON null)
+        if (!node.isContainerNode) return null
+        Json.mapper.writerWithDefaultPrettyPrinter().writeValueAsString(node)
     } catch (_: Exception) {
         null
     }

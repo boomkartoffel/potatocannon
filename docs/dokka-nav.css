@@ -1,0 +1,139 @@
+:root {
+  --pc-header-h: 56px;
+  --pc-bg: rgba(255, 255, 255, 0.85);
+  --pc-border: #e6e6e8;
+  --pc-text: #1f2328;
+  --pc-accent: #3b82f6;
+  --pc-link: #0b57d0;
+  --pc-hover: rgba(59, 130, 246, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pc-bg: rgba(27, 31, 35, 0.75);
+    --pc-border: #2d2f34;
+    --pc-text: #e6edf3;
+    --pc-link: #7aa2ff;
+    --pc-hover: rgba(122, 162, 255, 0.12);
+  }
+}
+
+/* Sticky header with subtle blur */
+.pc-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  backdrop-filter: saturate(140%) blur(8px);
+  background: var(--pc-bg);
+  border-bottom: 1px solid var(--pc-border);
+}
+
+/* Layout container */
+.pc-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+  height: var(--pc-header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Brand / project name */
+.pc-brand {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-decoration: none;
+  color: var(--pc-text);
+  font-size: 16px;
+}
+
+/* Nav links */
+.pc-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pc-nav__link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 14px;
+  color: var(--pc-text);
+  border: 1px solid transparent;
+}
+
+.pc-nav__link:hover {
+  background: var(--pc-hover);
+  border-color: transparent;
+}
+
+.pc-nav__link:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--pc-hover);
+}
+
+/* Make room for the sticky header if the theme doesn't already */
+.main-content {
+  scroll-margin-top: calc(var(--pc-header-h) + 12px);
+}
+
+/* Small screens */
+@media (max-width: 720px) {
+  .pc-container {
+    height: auto;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    align-items: flex-start;
+  }
+  .pc-brand {
+    margin-bottom: 6px;
+  }
+}
+
+/* Hide the top module title "potato-cannon" */
+#main #content > .cover > h1.cover,
+ #leftColumn  {
+  display: none !important;
+}
+
+/* Tidy the spacing left by the cover block
+#main #content > .cover {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+*/
+
+/* Section blocks */
+.pc-section {
+  margin: 32px auto;
+  padding: 24px 24px;
+  border: 1px solid var(--pc-border, #e6e6e8);
+  border-radius: 14px;
+  background: var(--pc-section-bg, rgba(255,255,255,0.7));
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  max-width: 1100px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pc-section {
+    background: var(--pc-section-bg-dark, rgba(27,31,35,0.55));
+    border-color: var(--pc-border-dark, #2d2f34);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  }
+}
+
+/* Optional: subtle divider between README and CHANGELOG sections */
+#readme.pc-section { margin-top: 16px; }
+#changelog.pc-section { margin-top: 40px; }
+
+/* Ensure in-page anchor scrolling clears the sticky header */
+#readme, #changelog { scroll-margin-top: 72px; }
+

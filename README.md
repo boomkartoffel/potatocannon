@@ -149,10 +149,10 @@ The output of the Potato Cannon is structured and clear, making it easy to under
 
 Potato Cannon follows [Semantic Versioning](https://semver.org/).
 
-See [CHANGELOG.md](./CHANGELOG.md) for details on past releases.
+See the changelog for details on past releases.
 
 
-### Project Status
+## Project Status
 
 The Potato Cannon is currently in active development and considered **alpha**.
 

@@ -17,6 +17,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import org.slf4j.bridge.SLF4JBridgeHandler
 import java.util.logging.LogManager
+import java.util.Collections
 import kotlin.coroutines.CoroutineContext
 
 
@@ -44,7 +45,7 @@ object TestBackend {
 
     private var lastNumber: Int? = null
 
-    private val timeoutConfigs: MutableSet<TimeOutConfig> = mutableSetOf()
+    private val timeoutConfigs: MutableSet<TimeOutConfig> = Collections.synchronizedSet(mutableSetOf())
 
     init {
         // Remove existing handlers from JUL root logger -> this is to remove error logging from netty on shutdown and have the logback-test.xml apply
@@ -56,7 +57,15 @@ object TestBackend {
 
     fun start(port: Int) {
 
-        server = embeddedServer(Netty, port = port) {
+        server = embeddedServer(Netty,
+            port = port,
+            configure = {
+                // Allow many concurrent calls
+                runningLimit = 2_000
+                // Optional: let the queue absorb bursts
+                requestQueueLimit = 10_000
+            }
+        ) {
             install(ContentNegotiation) {
                 json()
             }
@@ -70,7 +79,6 @@ object TestBackend {
                 }
                 get("/test-wait") {
                     delay(500)
-                    println(System.currentTimeMillis())
                     call.respondText("Hello")
                 }
                 get("/test-wait-parallel") {

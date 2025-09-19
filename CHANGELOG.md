@@ -7,9 +7,12 @@ All notable changes to this project will be documented here.
 - Compiler settings updated for backwards compatibility with **Java 11**
 - Refactored naming conventions for clarity
 - Improved structured logging system
+- Changed the HttpClient from Java's built-in to Apache HttpClient
+- Ensured HTTP/1.1 and HTTP/2 support with Apache HttpClient
 
 ### Added
-- Shaded **Jackson library** via ShadowJar to avoid dependency conflicts
+- Shaded **Jackson library** and **Apache HttpClient** via ShadowJar to avoid dependency conflicts
+- BackoffPolicy for retries
 
 ## [0.1.0-alpha] - 2025-09-01
 ### Added

@@ -4,6 +4,7 @@ import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureExce
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
+import io.github.boomkartoffel.potatocannon.strategy.NegotiatedProtocol
 import java.nio.charset.Charset
 
 private val defaultCharset = Charsets.UTF_8
@@ -26,8 +27,8 @@ class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
 
     private val normalized = rawHeaders.mapKeys { it.key.lowercase() }
 
-    operator fun get(key: String): List<String>? {
-        return normalized[key.lowercase()]
+    operator fun get(key: String): List<String> {
+        return normalized[key.lowercase()] ?: emptyList()
     }
 
     internal fun toMap(): Map<String, List<String>> = normalized
@@ -41,11 +42,11 @@ class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
  * @property potato The original [Potato] that was fired.
  * @property fullUrl The full URL used in the request, including query parameters.
  * @property statusCode The HTTP response status code (e.g., 200, 404).
- * @property responseBody The raw response body as a [ByteArray], or null if the request had no body.
+ * @property responseBody The raw response body as a [ByteArray]
  * @property requestHeaders The [Headers] sent with the request.
  * @property responseHeaders The [Headers] received in the response.
  * @property queryParams The query parameters used in the request.
- * @property durationMillis Total time in milliseconds taken to execute the request.
+ * @property durationMillis Total time in milliseconds taken to execute the request and receive the response.
  * @property attempts The number of attempts it took to successfully send the request.
  * @since 0.1.0
  */
@@ -53,31 +54,32 @@ class Result internal constructor(
     val potato: Potato,
     val fullUrl: String,
     val statusCode: Int,
-    val responseBody: ByteArray?,
+    val responseBody: ByteArray,
     val requestHeaders: Headers,
     val responseHeaders: Headers,
     val queryParams: Map<String, List<String>>,
     val durationMillis: Long,
     //this is not a configuration, but a list of strategies that are necessary for deserialization, and it is not supposed to be accessed by the user
     internal val deserializationStrategies: List<DeserializationStrategy>,
-    val attempts: Int
+    val attempts: Int,
+    val protocol : NegotiatedProtocol,
 ) {
 
     /**
      * Decodes the raw response body into text using the given [charset].
      *
      * @param charset The character set to use when decoding the body.
-     * @return The decoded response text, or `null` if the response has no body.
+     * @return The decoded response text, or an empty String if the response has no body.
      * @since 0.1.0
      */
-    fun responseText(charset: Charset) = responseBody?.toString(charset)
+    fun responseText(charset: Charset) = responseBody.toString(charset)
 
     /**
      * Decodes the raw response body into text by automatic detection.
      *
      * The charset is typically resolved from the `Content-Type` response header or defaults to UTF-8.
      *
-     * @return The decoded response text, or `null` if the response has no body.
+     * @return The decoded response text, or an empty String if the response has no body.
      * @since 0.1.0
      */
     fun responseText() = responseText(responseCharset())
@@ -241,7 +243,9 @@ class Result internal constructor(
      */
     fun <T> bodyAsObject(clazz: Class<T>, deserializer: Deserializer, charset: Charset): T {
         val text = responseText(charset)
-            ?: throw ResponseBodyMissingException()
+        if (text.isEmpty()) {
+            throw ResponseBodyMissingException()
+        }
         return try {
             deserializer.deserializeObject(text, clazz)
         } catch (e: Exception) {
@@ -262,7 +266,9 @@ class Result internal constructor(
      */
     fun <T> bodyAsList(clazz: Class<T>, deserializer: Deserializer, charset: Charset): List<T> {
         val text = responseText(charset)
-            ?: throw ResponseBodyMissingException()
+        if (text.isEmpty()) {
+            throw ResponseBodyMissingException()
+        }
         return try {
             deserializer.deserializeList(text, clazz)
         } catch (e: Exception) {
@@ -272,7 +278,7 @@ class Result internal constructor(
 
     private fun responseCharset(): Charset {
         return responseHeaders[contentTypeHeaderName]
-            ?.firstOrNull()
+            .firstOrNull()
             ?.let { extractCharset(it) }
             ?: defaultCharset
     }

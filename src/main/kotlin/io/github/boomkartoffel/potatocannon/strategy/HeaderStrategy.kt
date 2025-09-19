@@ -25,65 +25,113 @@ sealed interface HeaderStrategy : CannonSetting, PotatoSetting {
  */
 enum class ContentType(val mime: String) : HeaderStrategy {
     // Application
+    /** `application/json` */
     JSON("application/json"),
+    /** `application/xml` */
     XML("application/xml"),
+    /** `application/x-www-form-urlencoded` */
     FORM_URLENCODED("application/x-www-form-urlencoded"),
+    /** `application/javascript` */
     JAVASCRIPT("application/javascript"),
+    /** `application/octet-stream` */
     OCTET_STREAM("application/octet-stream"),
+    /** `application/rtf` */
     RTF("application/rtf"),
+    /** `application/pdf` */
     PDF("application/pdf"),
+    /** `application/zip` */
     ZIP("application/zip"),
+    /** `application/gzip` */
     GZIP("application/gzip"),
+    /** `application/x-tar` */
     TAR("application/x-tar"),
+    /** `application/x-7z-compressed` */
     SEVEN_ZIP("application/x-7z-compressed"),
+    /** `application/x-bzip2` */
     BZIP2("application/x-bzip2"),
+    /** `application/x-ndjson` */
     NDJSON("application/x-ndjson"),
+    /** `application/yaml` */
     YAML("application/yaml"),
+    /** `application/ld+json` */
     JSON_LD("application/ld+json"),
+    /** `application/epub+zip` */
     EPUB("application/epub+zip"),
+    /** `application/xhtml+xml` */
     XHTML("application/xhtml+xml"),
+    /** `application/manifest+json` */
     MANIFEST("application/manifest+json"),
+    /** `application/problem+json` */
     PROBLEM_JSON("application/problem+json"),
 
     // Text
+    /** `text/plain` */
     TEXT_PLAIN("text/plain"),
+    /** `text/event-stream` */
     EVENT_STREAM("text/event-stream"),
+    /** `text/csv` */
     CSV("text/csv"),
+    /** `text/html` */
     HTML("text/html"),
+    /** `text/css` */
     CSS("text/css"),
+    /** `text/markdown` */
     MARKDOWN("text/markdown"),
 
     // Data
+    /** `multipart/form-data` */
     MULTIPART_FORM_DATA("multipart/form-data"),
 
     // Images
+    /** `image/png` */
     PNG("image/png"),
+    /** `image/jpeg` */
     JPEG("image/jpeg"),
+    /** Non-standard alias for `image/jpeg`. Prefer [JPEG]. */
     JPG("image/jpg"), // alias (non-standard but seen)
+    /** `image/gif` */
     GIF("image/gif"),
+    /** `image/svg+xml` */
     SVG("image/svg+xml"),
+    /** `image/avif` */
     AVIF("image/avif"),
+    /** `image/bmp` */
     BMP("image/bmp"),
+    /** `image/tiff` */
+    TIFF("image/tiff"),
+    /** `image/vnd.microsoft.icon` */
     ICON("image/vnd.microsoft.icon"),
+    /** image/x-icon */
     ICON_X("image/x-icon"), // alias used by some servers
 
     // Audio
+    /** `audio/mpeg` */
     MP3("audio/mpeg"),
+    /** `audio/wav` */
     WAV("audio/wav"),
+    /** `audio/x-wav` -> non-standard alias for `audio/wav`. Prefer [WAV]. */
     WAV_X("audio/x-wav"), // alias used by some servers
 
     // Video
+    /** `video/webm` */
     WEBM_VIDEO("video/webm"),
+    /** `video/mp4` */
     MP4_VIDEO("video/mp4"),
 
     // Font
+    /** `font/woff` */
     WOFF("font/woff"),
+    /** `font/woff2` */
     WOFF2("font/woff2"),
+    /** `font/ttf` */
     TTF("font/ttf"),
+    /** `font/otf` */
     OTF("font/otf"),
 
     // Aliases / legacy (optional)
+    /** `text/javascript` */
     TEXT_JAVASCRIPT("text/javascript"), // deprecated alias
+    /** `application/x-yaml` */
     YAML_X("application/x-yaml"); // non-standard alias, still seen
 
     override fun apply(headers: MutableMap<String, List<String>>) {

@@ -1,4 +1,6 @@
 package io.github.boomkartoffel.potatocannon.exception
+import io.github.boomkartoffel.potatocannon.potato.HttpMethod
+import io.github.boomkartoffel.potatocannon.potato.Potato
 import java.util.concurrent.CancellationException
 import java.lang.InterruptedException
 import io.github.boomkartoffel.potatocannon.result.Result
@@ -35,8 +37,7 @@ class DeserializationFailureException internal constructor(
 ) : PotatoCannonException("Failed to deserialize response body as $className\n${cause.message}", cause)
 
 /**
- * Thrown when a request fails during **execution** while waiting for the async
- * computation to complete.
+ * Thrown when a request fails during **execution** while waiting for the computation to complete.
  *
  *This exception is only created when awaiting the result fails due to:
  * - [CancellationException] — the computation was cancelled
@@ -50,20 +51,28 @@ class RequestExecutionException internal constructor(
     cause: Throwable
 ) : PotatoCannonException("Request execution failed", cause)
 
+
+
+class VerificationException internal constructor(
+    cause: Throwable
+): PotatoCannonException("Verification of an expectation has failed", cause)
+
 /**
  * Wraps failures that occur while **building** a request
  *
  * Typical sources:
  * - `URI.create(fullUrl)` throws for an invalid URL.
  * - `HttpRequest.Builder.header(...)` throws for illegal names/values.
+ * - The charset of content-type is set but no mime type is defined.
  *
  * The original cause is preserved as [cause].
  *
  * @since 0.1.0
  */
 class RequestPreparationException internal constructor(
-    cause: Throwable
-) : PotatoCannonException("Request preparation failed", cause)
+    message: String,
+    cause: Throwable?
+) : PotatoCannonException(message, cause)
 
 /**
  * Emitted when an attempt to **send** the request fails (I/O, timeouts, connection issues).
@@ -76,5 +85,7 @@ class RequestPreparationException internal constructor(
  */
 class RequestSendingFailureException internal constructor(
     cause: Throwable,
-    attempt: Int
-) : PotatoCannonException("Failed to send request within $attempt attempts", cause)
+    attempt: Int,
+    method: HttpMethod,
+    url: String
+) : PotatoCannonException("Failed to send ${method.name} request to $url within $attempt attempts: ${cause.message}", cause)
