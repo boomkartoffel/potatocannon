@@ -1351,6 +1351,31 @@ class PotatoCannonTest {
     }
 
     @Test
+    fun `A key can be retrieved from a Cannon context that is placed on the cannon level`() {
+
+        val context = CannonContext().apply { this["key"] = "valueFromContext" }
+        val queryParamIsAvailable = Expectation("Query param from context is available") { result ->
+            result.fullUrl shouldContain "available=valueFromContext"
+        }
+
+        val potato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            resolveFromContext { ctx ->
+                QueryParam("available", ctx["key"])
+            },
+            queryParamIsAvailable
+        )
+
+        shouldNotThrow<RequestPreparationException> {
+            baseCannon
+                .withContext(context)
+                .fire(potato)
+        }
+
+    }
+
+    @Test
     fun `Binary Body can be sent`() {
         val binaryContent = ByteArray(1024) { it.toByte() } // 1 KB of binary data
 

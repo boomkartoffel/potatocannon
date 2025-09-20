@@ -12,7 +12,6 @@ import io.github.boomkartoffel.potatocannon.result.Headers
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.result.log
 import io.github.boomkartoffel.potatocannon.strategy.*
-import lastSettingWithDefault
 import org.apache.hc.client5.http.async.methods.SimpleHttpResponse
 import org.apache.hc.client5.http.async.methods.SimpleRequestBuilder
 import org.apache.hc.client5.http.config.TlsConfig
@@ -24,9 +23,6 @@ import org.apache.hc.core5.http.HttpRequestInterceptor
 import org.apache.hc.core5.http.ProtocolVersion
 import org.apache.hc.core5.http.protocol.HttpContext
 import org.apache.hc.core5.http2.HttpVersionPolicy
-import userAgentStrategy
-import validHeader
-import validUri
 import java.net.URLEncoder
 import java.util.*
 import java.util.concurrent.*

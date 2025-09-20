@@ -1,5 +1,12 @@
 package io.github.boomkartoffel.potatocannon.strategy
 
+import io.github.boomkartoffel.potatocannon.strategy.ConcurrencyLimit.Companion.of
+import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout.Companion.MAX
+import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout.Companion.MIN
+import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout.Companion.of
+import io.github.boomkartoffel.potatocannon.strategy.RetryDelayPolicy.NONE
+import io.github.boomkartoffel.potatocannon.strategy.RetryDelayPolicy.PROGRESSIVE
+
 
 /**
  * Caps the number of parallel requests that may be in-flight at any given time.
@@ -11,8 +18,7 @@ package io.github.boomkartoffel.potatocannon.strategy
  * @throws IllegalArgumentException if [value] is outside the range.
  * @since 0.1.0
  */
-@JvmInline
-value class ConcurrencyLimit(val value: Int) : CannonSetting {
+class ConcurrencyLimit(val value: Int) : CannonSetting {
     init {
         require(value in MIN..MAX) { "Concurrency must be between $MIN and $MAX, was $value" }
     }
@@ -51,8 +57,7 @@ value class ConcurrencyLimit(val value: Int) : CannonSetting {
  * @throws IllegalArgumentException if [count] is outside the range.
  * @since 0.1.0
  */
-@JvmInline
-value class RetryLimit(val count: Int) : CannonSetting, PotatoSetting {
+class RetryLimit(val count: Int) : CannonSetting, PotatoSetting {
     init {
         require(count in MIN..MAX) { "Max retries must be between $MIN and $MAX, was $count" }
     }
@@ -110,8 +115,7 @@ enum class RetryDelayPolicy : CannonSetting, PotatoSetting {
  * @throws IllegalArgumentException if [durationMillis] is outside the range.
  * @since 0.1.0
  */
-@JvmInline
-value class RequestTimeout(val durationMillis: Long) : CannonSetting, PotatoSetting {
+class RequestTimeout(val durationMillis: Long) : CannonSetting, PotatoSetting {
     init {
         require(durationMillis in MIN..MAX) {
             "Request timeout must be between $MIN and $MAX ms, was $durationMillis ms"

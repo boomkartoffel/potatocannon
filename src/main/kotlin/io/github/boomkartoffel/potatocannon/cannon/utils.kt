@@ -1,9 +1,10 @@
+package io.github.boomkartoffel.potatocannon.cannon
+
+import io.github.boomkartoffel.potatocannon.BuildConfig
 import io.github.boomkartoffel.potatocannon.exception.RequestPreparationException
 import io.github.boomkartoffel.potatocannon.strategy.CustomHeader
 import io.github.boomkartoffel.potatocannon.strategy.HeaderUpdateStrategy
-import io.github.boomkartoffel.potatocannon.BuildConfig
 import io.github.boomkartoffel.potatocannon.strategy.PotatoCannonSetting
-
 import java.net.URI
 
 internal fun validUri(fullUrl: String): URI {
@@ -76,5 +77,5 @@ internal fun validHeader(name: String, value: String): Pair<String, String> {
 internal fun userAgentStrategy() =
     CustomHeader("user-agent", "PotatoCannon/${BuildConfig.VERSION}", HeaderUpdateStrategy.OVERWRITE)
 
-inline fun <reified T : PotatoCannonSetting> List<PotatoCannonSetting>.lastSettingWithDefault(default: PotatoCannonSetting): T =
+internal inline fun <reified T : PotatoCannonSetting> List<PotatoCannonSetting>.lastSettingWithDefault(default: PotatoCannonSetting): T =
     asSequence().filterIsInstance<T>().lastOrNull() ?: (default as T)
