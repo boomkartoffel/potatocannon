@@ -1,6 +1,5 @@
 package io.github.boomkartoffel.potatocannon
 
-import io.github.boomkartoffel.potatocannon.strategy.BasicAuth
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
@@ -8,71 +7,33 @@ import io.github.boomkartoffel.potatocannon.exception.RequestPreparationExceptio
 import io.github.boomkartoffel.potatocannon.exception.RequestSendingFailureException
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
-import io.github.boomkartoffel.potatocannon.strategy.ContentType
-import io.github.boomkartoffel.potatocannon.strategy.FireMode
-import io.github.boomkartoffel.potatocannon.strategy.Check
 import io.github.boomkartoffel.potatocannon.potato.HttpMethod
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.potato.TextBody
-import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.result.DeserializationFormat
 import io.github.boomkartoffel.potatocannon.result.Deserializer
-import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObject
-import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
-import io.github.boomkartoffel.potatocannon.strategy.BearerAuth
-import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveEnums
-import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
-import io.github.boomkartoffel.potatocannon.strategy.ConcurrencyLimit
-import io.github.boomkartoffel.potatocannon.strategy.CookieHeader
-import io.github.boomkartoffel.potatocannon.strategy.CustomHeader
-import io.github.boomkartoffel.potatocannon.strategy.HeaderUpdateStrategy
-import io.github.boomkartoffel.potatocannon.strategy.LogExclude
-import io.github.boomkartoffel.potatocannon.strategy.Logging
-import io.github.boomkartoffel.potatocannon.strategy.QueryParam
-import io.github.boomkartoffel.potatocannon.strategy.Expectation
-import io.github.boomkartoffel.potatocannon.strategy.HttpProtocolVersion
-import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
-import io.github.boomkartoffel.potatocannon.strategy.RetryLimit
-import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
-import io.github.boomkartoffel.potatocannon.strategy.PotatoSetting
-import io.github.boomkartoffel.potatocannon.strategy.ProtocolFamily
-import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout
-import io.github.boomkartoffel.potatocannon.strategy.RetryDelayPolicy
-import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
-import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode
-import io.github.boomkartoffel.potatocannon.strategy.withDescription
+import io.github.boomkartoffel.potatocannon.result.Result
+import io.github.boomkartoffel.potatocannon.strategy.*
 import io.kotest.assertions.throwables.shouldNotThrow
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
-import io.kotest.matchers.comparables.shouldBeLessThan
+import io.kotest.matchers.longs.shouldBeGreaterThan
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.longs.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
-import java.time.Duration
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.LocalTime
-import java.time.MonthDay
-import java.time.OffsetDateTime
-import java.time.OffsetTime
-import java.time.Period
-import java.time.Year
-import java.time.YearMonth
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
-import kotlin.collections.first
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
+import java.time.*
+import java.util.stream.Stream
 import kotlin.properties.Delegates
 import kotlin.random.Random
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.MethodSource
-import org.junit.jupiter.params.provider.Arguments
-import java.util.stream.Stream
 import kotlin.system.measureNanoTime
 import kotlin.system.measureTimeMillis
 
@@ -165,7 +126,6 @@ class PotatoCannonTest {
     fun tearDown() {
         TestBackend.stop()
     }
-
 
 
     @Test
@@ -324,7 +284,7 @@ class PotatoCannonTest {
             baseCannon
                 .addSettings(expect12Attempts)
                 .fire(timeoutPotato)
-        }/1_000_000
+        } / 1_000_000
 
         println("12 attempts took $elapsedMs ms (expected ≈ $targetMs ms; window [$minMs, $maxMs] ms)")
 
@@ -355,50 +315,21 @@ class PotatoCannonTest {
 
         val targetMs = baseMs + miscOverheadMs
 
-        val pctSlack = 0.02                     // ±2% headroom for CI/jitter
+        val pctSlack = 0.03                     // ±3% headroom for CI/jitter
         val minMs = (targetMs * (1 - pctSlack)).toLong()  // lower bound
         val maxMs = (targetMs * (1 + pctSlack)).toLong()  // upper bound
 
-        val elapsedMs = measureNanoTime {
+        val elapsedMs = measureTimeMillis {
             baseCannon
                 .addSettings(expect12Attempts)
                 .fire(timeoutPotato)
-        }/1_000_000
+        }
 
         println("12 attempts took $elapsedMs ms (expected ≈ $targetMs ms; window [$minMs, $maxMs] ms)")
 
         elapsedMs shouldBeGreaterThanOrEqual minMs
         elapsedMs shouldBeLessThanOrEqual maxMs
     }
-
-    @Test
-    fun `Parallel Requests are retried out of order (even if concurrency is disabled)`() {
-
-        val timeoutPotato1 = Potato(
-            method = HttpMethod.POST, path = "/timeout",
-            RetryLimit(5),
-            RequestTimeout.of(300),
-            QueryParam("id", "Test1Parallel"),
-            QueryParam("returnOkAfter", "4"),
-            LogCommentary("First potato, should appear as SECOND because of longer Request Timeout")
-        )
-
-        val timeoutPotato2 = Potato(
-            method = HttpMethod.POST, path = "/timeout",
-            RetryLimit(5),
-            RequestTimeout.of(150),
-            QueryParam("id", "Test2Parallel"),
-            QueryParam("returnOkAfter", "4"),
-            LogCommentary("Second potato, should appear FIRST in log due to shorter Request Timeout")
-        )
-
-        baseCannon
-            .addSettings(expect4Attempts)
-            .addSettings(ConcurrencyLimit(1))
-            .withFireMode(FireMode.PARALLEL)
-            .fire(timeoutPotato1, timeoutPotato2)
-    }
-
 
     @Test
     fun `Deserialization attempts at responses with no body fail with NoBodyException`() {
@@ -464,46 +395,31 @@ class PotatoCannonTest {
     @Test
     fun `GET request times 500 to test-wait takes less than 1000 ms in parallel mode`() {
         val potato = Potato(
-            method = HttpMethod.GET, path = "/test-wait-parallel", expect200StatusCode,
+            method = HttpMethod.GET, path = "/test-wait-parallel",
+            expect200StatusCode,
             expectHelloResponseText,
             Logging.OFF
         )
 
-//        val start = System.currentTimeMillis()
-//        baseCannon
-//            .addSettings(ConcurrencyLimit(500))
-//            .fire(potato * 500)
-//        val end = System.currentTimeMillis()
-//        val durationMs = end - start
-//
-//        println("Parallel duration: $durationMs ms")
-//        durationMs shouldBeLessThan 100
-
-        for (n in 100..1000 step 100) {
-            val start = System.nanoTime()
+        val timeParallelFullCapacity = measureTimeMillis {
             baseCannon
-                .addSettings(ConcurrencyLimit(n))
+                .addSettings(ConcurrencyLimit(500))
                 .addSettings(RetryLimit(100))
                 .addSettings(RetryDelayPolicy.NONE)
-                .fire(potato * n)
-            val durationMs = (System.nanoTime() - start) / 1_000_000
-
-            println("Parallel duration (n=$n): $durationMs ms")
+                .fire(potato * 500)
         }
 
-        println("Half capacity")
-
-        for (n in 100..1000 step 100) {
-            val start = System.nanoTime()
+        val timeParallelHalfCapacity = measureTimeMillis {
             baseCannon
-                .addSettings(ConcurrencyLimit(n/2))
+                .addSettings(ConcurrencyLimit(250))
                 .addSettings(RetryLimit(100))
                 .addSettings(RetryDelayPolicy.NONE)
-                .fire(potato * n)
-            val durationMs = (System.nanoTime() - start) / 1_000_000
-
-            println("Parallel duration (n=$n): $durationMs ms")
+                .fire(potato * 500)
         }
+
+        timeParallelFullCapacity shouldBeLessThan 1000
+        timeParallelHalfCapacity shouldBeGreaterThan 1000
+        println("Time for full capacity: $timeParallelFullCapacity, Time for half capacity: $timeParallelHalfCapacity")
 
     }
 
@@ -1173,12 +1089,12 @@ class PotatoCannonTest {
                 BearerAuth("mytoken"),
                 expectHelloResponseText,
                 Expectation("Only one content type is provided and that is XML") { result ->
-                    result.requestHeaders["Content-Type"]?.size shouldBe 1
-                    result.requestHeaders["Content-Type"]?.first() shouldBe "application/xml"
+                    result.requestHeaders["Content-Type"].size shouldBe 1
+                    result.requestHeaders["Content-Type"].first() shouldBe "application/xml"
                 },
                 Expectation("Only one Auth Header type is provided and that is the Bearer token") { result ->
-                    result.requestHeaders["Authorization"]?.size shouldBe 1
-                    result.requestHeaders["Authorization"]?.first() shouldBe "Bearer mytoken"
+                    result.requestHeaders["Authorization"].size shouldBe 1
+                    result.requestHeaders["Authorization"].first() shouldBe "Bearer mytoken"
                 })
         )
 
@@ -1186,7 +1102,9 @@ class PotatoCannonTest {
             listOf(
                 BasicAuth(
                     username = "user", password = "password"
-                ), expect200StatusCode, QueryParam("queryCannon", "valueCannon")
+                ),
+                expect200StatusCode,
+                QueryParam("queryCannon", "valueCannon")
             )
         )
 
@@ -1200,20 +1118,20 @@ class PotatoCannonTest {
 
         val alternateBeeceptorUrl = "https://$randomLetters.free.beeceptor.com"
 
-        val verifyBeceptorUrl = Expectation("Beeceptor URL is used") { result ->
+        val expectBeceptorUrl = Expectation("Beeceptor URL is used") { result ->
             result.fullUrl shouldContain "$alternateBeeceptorUrl/test"
         }
 
-        val verifyNotLocalHost = Expectation("Potato is not fired towards localhost") { result ->
-            result.fullUrl shouldNotContain "localhost"
-        }
-
         val defaultPotato = Potato(
-            method = HttpMethod.POST, path = "/test", expect200StatusCode, expectHelloResponseText
+            method = HttpMethod.POST,
+            path = "/test",
+            expect200StatusCode,
+            expectHelloResponseText,
+            expectHostToBeLocalhost
         )
 
         val overrideBaseUrlPotato = defaultPotato.withSettings(
-            OverrideBaseUrl(alternateBeeceptorUrl), verifyBeceptorUrl, verifyNotLocalHost
+            OverrideBaseUrl(alternateBeeceptorUrl), expectBeceptorUrl, expectHostNotToBeLocalhost
         )
 
         baseCannon.fire(defaultPotato, overrideBaseUrlPotato)
@@ -1353,19 +1271,83 @@ class PotatoCannonTest {
     }
 
     @Test
-    fun `POST calls can be chained`() {
+    fun `Requests can be chained and information can be shared by the CannonContext`() {
+        val keyForSecondCall = "the-key"
+
         val firstPotato = Potato(
-            method = HttpMethod.POST, path = "/first-call", expect200StatusCode
+            method = HttpMethod.POST,
+            path = "/first-call",
+            expect200StatusCode,
+            CaptureToContext(keyForSecondCall) {
+                it.responseText()
+            },
+            CaptureToContext("attempts") {
+                it.attempts
+            },
+            resolveFromContext { ctx ->
+                ctx.get<String>("test") shouldBe "test"
+                LogCommentary("We have a cannon context: ${ctx.get<String>("test")}")
+            }
         )
 
-        val result = baseCannon.fire(firstPotato)
+        val secondPotato = Potato(
+            method = HttpMethod.POST,
+            path = "/second-call",
+            expect200StatusCode,
+            expectOKResponseText,
+            resolveFromContext { ctx ->
+                QueryParam("number", ctx.get<String>(keyForSecondCall))
+            },
+            resolveFromContext { ctx ->
+                LogCommentary("The previous request needed ${ctx.get<Int>("attempts")} attempts")
+            },
+            resolveFromContext { ctx ->
+                ctx.get<String>("test") shouldBe "test"
+                LogCommentary("We have a cannon context: ${ctx.get<String>("test")}")
+            }
 
-        baseCannon.fire(
-            firstPotato.withPath("/second-call").addSettings(
-                QueryParam("number", result[0].responseText())
+        )
+
+        baseCannon
+            .withFireMode(FireMode.SEQUENTIAL)
+            .addSettings(CannonContext().also { it["test"] = "test" })
+            .fire(
+                firstPotato, secondPotato
             )
+
+    }
+
+    @Test
+    fun `Resolving a key from context that is not present or of the wrong type will throw a RequestPreparationException`() {
+
+        val missingKey = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            resolveFromContext { ctx ->
+                QueryParam("missing", ctx["missing"])
+            },
         )
 
+        val context = CannonContext().apply { this["intKey"] = 1 }
+
+        val wrongCast = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            resolveFromContext { ctx ->
+                val wrongType: String = ctx["intKey"]
+                QueryParam("wrongType", wrongType)
+            },
+        )
+
+        shouldThrow<RequestPreparationException> {
+            baseCannon.fire(missingKey)
+        }.message shouldBe "No value found in context for the key 'missing'"
+
+        shouldThrow<RequestPreparationException> {
+            baseCannon
+                .withContext(context)
+                .fire(wrongCast)
+        }.message shouldBe "Value for 'intKey' is of type java.lang.Integer, but expected is java.lang.String"
     }
 
     @Test

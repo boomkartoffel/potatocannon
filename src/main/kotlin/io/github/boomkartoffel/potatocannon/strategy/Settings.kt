@@ -1,5 +1,7 @@
 package io.github.boomkartoffel.potatocannon.strategy
 
+sealed interface PotatoCannonSetting
+
 /**
  * Marker interface for settings that apply to individual Potatoes (HTTP requests).
  *
@@ -15,7 +17,7 @@ package io.github.boomkartoffel.potatocannon.strategy
 
  * @since 0.1.0
  */
-sealed interface PotatoSetting
+sealed interface PotatoSetting: PotatoCannonSetting
 
 /**
  * Marker interface for settings that apply globally to the Cannon.
@@ -32,4 +34,4 @@ sealed interface PotatoSetting
  *
  * @since 0.1.0
  */
-sealed interface CannonSetting
+sealed interface CannonSetting: PotatoCannonSetting

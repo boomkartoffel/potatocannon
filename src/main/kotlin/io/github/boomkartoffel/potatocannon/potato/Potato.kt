@@ -1,11 +1,7 @@
 package io.github.boomkartoffel.potatocannon.potato
 
-import io.github.boomkartoffel.potatocannon.strategy.PotatoSetting
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
-import io.github.boomkartoffel.potatocannon.strategy.Expectation
-import io.github.boomkartoffel.potatocannon.strategy.HeaderStrategy
-import io.github.boomkartoffel.potatocannon.strategy.QueryParam
-import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
+import io.github.boomkartoffel.potatocannon.strategy.*
 import java.nio.charset.Charset
 import kotlin.text.Charsets.UTF_8
 
@@ -179,7 +175,7 @@ class Potato(
         Potato(method, path, body, newSettings)
 
     /**
-     * Vararg convenience for replacing the entire settings list.
+     * Vararg convenience for replacing the entire settings list for the [Potato].
      *
      * If you want to **append** items to the existing settings, use
      * [addSettings] instead.

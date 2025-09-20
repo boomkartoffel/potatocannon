@@ -1,41 +1,20 @@
 package io.github.boomkartoffel.potatocannon.cannon
 
-import io.github.boomkartoffel.potatocannon.exception.RequestExecutionException
 import io.github.boomkartoffel.potatocannon.exception.PotatoCannonException
+import io.github.boomkartoffel.potatocannon.exception.RequestExecutionException
 import io.github.boomkartoffel.potatocannon.exception.RequestPreparationException
 import io.github.boomkartoffel.potatocannon.exception.RequestSendingFailureException
-import io.github.boomkartoffel.potatocannon.potato.Potato
-import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.potato.HttpMethod
+import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.potato.TextBody
 import io.github.boomkartoffel.potatocannon.result.Headers
+import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.result.log
-import io.github.boomkartoffel.potatocannon.strategy.OverrideBaseUrl
-import io.github.boomkartoffel.potatocannon.strategy.CannonSetting
-import io.github.boomkartoffel.potatocannon.strategy.Check
-import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
-import io.github.boomkartoffel.potatocannon.strategy.FireMode
-import io.github.boomkartoffel.potatocannon.strategy.HeaderStrategy
-import io.github.boomkartoffel.potatocannon.strategy.LogExclude
-import io.github.boomkartoffel.potatocannon.strategy.Logging
-import io.github.boomkartoffel.potatocannon.strategy.QueryParam
-import io.github.boomkartoffel.potatocannon.strategy.Expectation
-import io.github.boomkartoffel.potatocannon.strategy.ConcurrencyLimit
-import io.github.boomkartoffel.potatocannon.strategy.HttpProtocolVersion
-import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
-import io.github.boomkartoffel.potatocannon.strategy.NegotiatedProtocol
-import io.github.boomkartoffel.potatocannon.strategy.ProtocolFamily
-import io.github.boomkartoffel.potatocannon.strategy.RetryLimit
-import io.github.boomkartoffel.potatocannon.strategy.RequestTimeout
-import io.github.boomkartoffel.potatocannon.strategy.RetryDelayPolicy
+import io.github.boomkartoffel.potatocannon.strategy.*
+import lastSettingWithDefault
 import org.apache.hc.client5.http.async.methods.SimpleHttpResponse
 import org.apache.hc.client5.http.async.methods.SimpleRequestBuilder
-import java.net.URLEncoder
-import java.util.Collections
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Semaphore
-import java.util.concurrent.TimeUnit
 import org.apache.hc.client5.http.config.TlsConfig
 import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient
 import org.apache.hc.client5.http.impl.async.HttpAsyncClients
@@ -43,12 +22,14 @@ import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBu
 import org.apache.hc.client5.http.protocol.HttpClientContext
 import org.apache.hc.core5.http.HttpRequestInterceptor
 import org.apache.hc.core5.http.ProtocolVersion
-
 import org.apache.hc.core5.http.protocol.HttpContext
 import org.apache.hc.core5.http2.HttpVersionPolicy
 import userAgentStrategy
 import validHeader
 import validUri
+import java.net.URLEncoder
+import java.util.*
+import java.util.concurrent.*
 
 private const val PC_FINAL_REQ_HDRS = "pc.finalRequestHeaders"
 
@@ -70,7 +51,6 @@ class Cannon {
     private val negotiateClient: CloseableHttpAsyncClient
     private val h1Client: CloseableHttpAsyncClient
     private val h2Client: CloseableHttpAsyncClient
-
 
     private fun cmWithPolicy(policy: HttpVersionPolicy) =
         PoolingAsyncClientConnectionManagerBuilder.create()
@@ -112,9 +92,9 @@ class Cannon {
             .build().apply { start() }
     }
 
-    fun withFireMode(mode: FireMode): Cannon {
-        return addSettings(mode)
-    }
+    fun withFireMode(mode: FireMode): Cannon = addSettings(mode)
+
+    fun withContext(context: CannonContext): Cannon = addSettings(context)
 
     /**
      * Returns a new `Cannon` instance with additional [CannonSetting] strategies appended.
@@ -163,14 +143,9 @@ class Cannon {
      * @since 0.1.0
      */
     fun fire(potatoes: List<Potato>): List<Result> {
-        val mode = settings
-            .filterIsInstance<FireMode>()
-            .lastOrNull() ?: FireMode.PARALLEL
-
-        var maxConcurrent = settings
-            .filterIsInstance<ConcurrencyLimit>()
-            .lastOrNull()
-            ?.value ?: ConcurrencyLimit.DEFAULT
+        val ctx = settings.lastSettingWithDefault<CannonContext>(CannonContext())
+        val mode = settings.lastSettingWithDefault<FireMode>(FireMode.PARALLEL)
+        var maxConcurrent = settings.lastSettingWithDefault<ConcurrencyLimit>(ConcurrencyLimit(ConcurrencyLimit.DEFAULT)).value
 
         val isSequentialFiring = (mode == FireMode.SEQUENTIAL)
         val isParallelFiring = !isSequentialFiring
@@ -188,15 +163,6 @@ class Cannon {
                     var attempt = 0
                     var isPermitAcquired = false
 
-                    val retryLimit = (settings + potato.settings)
-                        .filterIsInstance<RetryLimit>()
-                        .lastOrNull()
-                        ?.count ?: RetryLimit.DEFAULT
-
-                    val retryDelayPolicy = (settings + potato.settings)
-                        .filterIsInstance<RetryDelayPolicy>()
-                        .lastOrNull() ?: RetryDelayPolicy.PROGRESSIVE
-
                     try {
                         while (true) {
                             // acquire policy
@@ -209,9 +175,14 @@ class Cannon {
                                 permits.acquire()
                             }
 
+                            val allSettings = effectiveSettings(settings, potato.settings, ctx)
+
+                            val retryLimit = allSettings.lastSettingWithDefault<RetryLimit>(RetryLimit(RetryLimit.DEFAULT)).count
+                            val retryDelayPolicy = allSettings.lastSettingWithDefault<RetryDelayPolicy>(RetryDelayPolicy.PROGRESSIVE)
+
                             var retryDelayMs: Long
                             try {
-                                val r = fireOne(potato, attempt)
+                                val r = fireOne(potato, attempt, ctx, allSettings)
 
                                 results.add(r)
                                 return@submit
@@ -271,11 +242,9 @@ class Cannon {
         }
     }
 
-    private fun fireOne(potato: Potato, currentAttempt: Int): Result {
+    private fun fireOne(potato: Potato, currentAttempt: Int, context: CannonContext, allSettings: List<PotatoCannonSetting>): Result {
 
         val allQueryParams = mutableMapOf<String, List<String>>()
-
-        val allSettings = settings + potato.settings
 
         allSettings
             .filterIsInstance<QueryParam>()
@@ -291,7 +260,7 @@ class Cannon {
             ""
         }
 
-        val urlToUse = potato.settings
+        val urlToUse = allSettings
             .filterIsInstance<OverrideBaseUrl>()
             .lastOrNull()?.url ?: baseUrl
 
@@ -318,9 +287,7 @@ class Cannon {
             return headers[key]?.lastOrNull()
         }
 
-        val version = allSettings
-            .filterIsInstance<HttpProtocolVersion>()
-            .lastOrNull() ?: HttpProtocolVersion.NEGOTIATE
+        val version = allSettings.lastSettingWithDefault<HttpProtocolVersion>(HttpProtocolVersion.NEGOTIATE)
 
         val client = when (version) {
             HttpProtocolVersion.HTTP_1_1 -> h1Client
@@ -367,9 +334,7 @@ class Cannon {
             )
         }
 
-        val baseLogging = allSettings
-            .filterIsInstance<Logging>()
-            .lastOrNull() ?: Logging.FULL
+        val baseLogging = allSettings.lastSettingWithDefault<Logging>(Logging.FULL)
 
         val logExcludes = allSettings
             .filterIsInstance<LogExclude>()
@@ -380,19 +345,16 @@ class Cannon {
             .filterIsInstance<Check>()
             .map { Expectation(it) }
 
-        val timeout = allSettings
-            .filterIsInstance<RequestTimeout>()
-            .lastOrNull()?.durationMillis ?: RequestTimeout.DEFAULT
+        val timeout = allSettings.lastSettingWithDefault<RequestTimeout>(RequestTimeout(RequestTimeout.DEFAULT)).durationMillis
 
         val ctx = HttpClientContext.create()
-
 
         val wireResponse = try {
             val t0 = System.nanoTime()
 
             val resp: SimpleHttpResponse = client
                 .execute(builder.build(), ctx, null)
-                .get(timeout, TimeUnit.MILLISECONDS)
+                .getWithin(timeout)
 
             val bodyBytes = resp.bodyBytes ?: ByteArray(0)
             val tDone = System.nanoTime()
@@ -431,6 +393,14 @@ class Cannon {
             protocol = wireResponse.httpVersion
         )
 
+        val captureToContexts = allSettings
+            .filterIsInstance<CaptureToContext>()
+
+        captureToContexts
+            .forEach {
+                context[it.key] = it.f(result)
+            }
+
         val expectationResults = expectations
             .map { it.verify(result) }
 
@@ -466,4 +436,35 @@ private fun ProtocolVersion?.toNegotiatedProtocol(): NegotiatedProtocol {
         else -> ProtocolFamily.OTHER
     }
     return NegotiatedProtocol(token, major, minor, family)
+}
+
+private fun effectiveSettings(
+    cannonSettings: List<CannonSetting>,
+    potatoSettings: List<PotatoSetting>,
+    context: CannonContext
+): List<PotatoCannonSetting> {
+    return (cannonSettings + potatoSettings)
+        .map {
+            when (it) {
+                is ResolveFromContext -> it.materialize(context)
+                else -> it
+            }
+        }
+}
+
+private object Deadlines {
+    val scheduler = ScheduledThreadPoolExecutor(1) { r ->
+        Thread(r, "PotatoCannon-Deadline").apply { isDaemon = true }
+    }
+}
+
+private fun <T> Future<T>.getWithin(timeoutMs: Long): T {
+    val cancelTask = Deadlines.scheduler.schedule({ cancel(true) }, timeoutMs, TimeUnit.MILLISECONDS)
+    return try {
+        get().also { cancelTask.cancel(false) } // success before deadline
+    } catch (e: CancellationException) {
+        throw TimeoutException("Timed out after $timeoutMs ms").apply { initCause(e) }
+    } finally {
+        cancelTask.cancel(false)
+    }
 }

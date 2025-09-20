@@ -1,9 +1,8 @@
 package io.github.boomkartoffel.potatocannon.exception
 import io.github.boomkartoffel.potatocannon.potato.HttpMethod
-import io.github.boomkartoffel.potatocannon.potato.Potato
-import java.util.concurrent.CancellationException
-import java.lang.InterruptedException
 import io.github.boomkartoffel.potatocannon.result.Result
+import io.github.boomkartoffel.potatocannon.strategy.CannonContext
+import java.util.concurrent.CancellationException
 
 sealed class PotatoCannonException(
     message: String,
@@ -52,7 +51,6 @@ class RequestExecutionException internal constructor(
 ) : PotatoCannonException("Request execution failed", cause)
 
 
-
 class VerificationException internal constructor(
     cause: Throwable
 ): PotatoCannonException("Verification of an expectation has failed", cause)
@@ -64,6 +62,7 @@ class VerificationException internal constructor(
  * - `URI.create(fullUrl)` throws for an invalid URL.
  * - `HttpRequest.Builder.header(...)` throws for illegal names/values.
  * - The charset of content-type is set but no mime type is defined.
+ * - Resolving data from [CannonContext] that is missing or of the wrong type
  *
  * The original cause is preserved as [cause].
  *
