@@ -49,6 +49,7 @@ class CannonContext : CannonSetting {
      * val token: String = ctx.get("token")   // or: ctx["token"]
      * val retries: Int = ctx["retries"]
      * ```
+     * @since 0.1.0
      */
     @JvmSynthetic
     inline operator fun <reified T : Any> get(key: String): T =
@@ -64,6 +65,7 @@ class CannonContext : CannonSetting {
      * @param type the expected runtime class of the value
      * @return the value for [key] cast to [T]
      * @throws [RequestPreparationException] if [key] is not present or if the value exists but is not of type [T]
+     * @since 0.1.0
      */
     fun <T : Any> get(key: String, type: Class<T>): T {
         val v = map[key] ?: throw RequestPreparationException("No value found in context for the key '$key'", null)
@@ -94,6 +96,7 @@ class CannonContext : CannonSetting {
  *
  * @param key the context key to write to
  * @param f   function that computes the value from the [Result]
+ * @since 0.1.0
  */
 class CaptureToContext(val key: String, val f: (Result) -> Any) : PotatoSetting
 
@@ -111,6 +114,7 @@ class CaptureToContext(val key: String, val f: (Result) -> Any) : PotatoSetting
  *     QueryParam("number", ctx.get<String>("myKey"))
  * }
  * ```
+ * @since 0.1.0
  */
 fun interface ResolveFromContext : PotatoSetting {
 
@@ -130,8 +134,8 @@ fun interface ResolveFromContext : PotatoSetting {
  * ### Example
  * ```
  *   // Resolve Authorization header from the captured token at send-time
- *   resolveFromContext { c ->
- *     val token = c.get<String>("token") ?: error("Missing auth token in CannonContext")
+ *   resolveFromContext { ctx ->
+ *     val token = ctx.get<String>("token")
  *     BearerAuth(token)
  *   }
  * ```
@@ -142,6 +146,7 @@ fun interface ResolveFromContext : PotatoSetting {
  * @see ResolveFromContext
  * @see CaptureToContext
  * @see CannonContext
+ * @since 0.1.0
  */
 fun resolveFromContext(block: (CannonContext) -> PotatoSetting): ResolveFromContext =
     ResolveFromContext { ctx -> block(ctx) }

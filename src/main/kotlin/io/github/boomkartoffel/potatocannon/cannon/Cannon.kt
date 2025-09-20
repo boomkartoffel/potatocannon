@@ -88,8 +88,34 @@ class Cannon {
             .build().apply { start() }
     }
 
+    /**
+     * Sets the firing mode for this cannon.
+     *
+     * When set to [FireMode.SEQUENTIAL], potatoes are fired strictly one after another, allowing
+     * safe sharing of data via [CannonContext] across requests. With [FireMode.PARALLEL], multiple
+     * potatoes may execute concurrently (subject to [ConcurrencyLimit]).
+     *
+     * This call adds/overrides a [FireMode] setting and returns a cannon with the updated settings
+     *
+     * @param mode The desired firing mode, e.g. [FireMode.SEQUENTIAL] or [FireMode.PARALLEL].
+     * @return A [Cannon] instance with the provided [FireMode] applied.
+     * @since 0.1.0
+     */
     fun withFireMode(mode: FireMode): Cannon = addSettings(mode)
 
+    /**
+     * Attaches a [CannonContext] to this cannon for sharing data across potatoes.
+     *
+     * Values stored in the context (e.g., via `CaptureToContext`) on earlier requests can be
+     * retrieved in later requests using [resolveFromContext].
+     *
+     * If multiple contexts are added, the most recently added one takes precedence when
+     * resolving settings. This call returns a cannon with the updated settings.
+     *
+     * @param context The [CannonContext] containing key–value pairs to be available during firing.
+     * @return A [Cannon] instance with the provided [CannonContext] applied.
+     * @since 0.1.0
+     */
     fun withContext(context: CannonContext): Cannon = addSettings(context)
 
     /**
