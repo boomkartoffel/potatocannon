@@ -145,71 +145,73 @@ class Cannon {
     fun fire(potatoes: List<Potato>): List<Result> {
         val ctx = settings.lastSettingWithDefault<CannonContext>(CannonContext())
         val mode = settings.lastSettingWithDefault<FireMode>(FireMode.PARALLEL)
-        var maxConcurrent = settings.lastSettingWithDefault<ConcurrencyLimit>(ConcurrencyLimit(ConcurrencyLimit.DEFAULT)).value
+        val results = mutableListOf<Result>()
 
-        val isSequentialFiring = (mode == FireMode.SEQUENTIAL)
-        val isParallelFiring = !isSequentialFiring
+        if (mode == FireMode.SEQUENTIAL) {
+            // Strict in-order execution
+            potatoes.forEach { potato ->
+                val allSettings = effectiveSettings(settings, potato.settings, ctx)
+                var attempt = 0
+                val retryLimit = allSettings.lastSettingWithDefault<RetryLimit>(RetryLimit(RetryLimit.DEFAULT)).count
+                val retryDelayPolicy = allSettings.lastSettingWithDefault<RetryDelayPolicy>(RetryDelayPolicy.PROGRESSIVE)
 
-        if (isSequentialFiring) maxConcurrent = 1
+                while (true) {
+                    try {
+                        val r = fireOne(potato, attempt, ctx, allSettings)
+                        results.add(r)
+                        break
+                    } catch (t: Throwable) {
+                        if (t is RequestSendingFailureException && attempt < retryLimit) {
+                            Thread.sleep(backoff(attempt++, retryDelayPolicy))
+                        } else {
+                            when (t) {
+                                is PotatoCannonException -> throw t
+                                is AssertionError -> throw t
+                                else -> throw RequestExecutionException(t)
+                            }
+                        }
+                    }
+                }
+            }
+            return results.toList()
+        }
 
-        val results = Collections.synchronizedList(mutableListOf<Result>())
-
+        val maxConcurrent = settings.lastSettingWithDefault<ConcurrencyLimit>(ConcurrencyLimit(ConcurrencyLimit.DEFAULT)).value
         val permits = Semaphore(maxConcurrent, false)
         val pool: ExecutorService = ParallelExecutorService.taskExecutor()
+        val syncResults = Collections.synchronizedList(mutableListOf<Result>())
 
         try {
             val futures = potatoes.map { potato ->
                 pool.submit {
                     var attempt = 0
-                    var isPermitAcquired = false
-
                     try {
+                        permits.acquire()
+                        val allSettings = effectiveSettings(settings, potato.settings, ctx)
+                        val retryLimit = allSettings.lastSettingWithDefault<RetryLimit>(RetryLimit(RetryLimit.DEFAULT)).count
+                        val retryDelayPolicy = allSettings.lastSettingWithDefault<RetryDelayPolicy>(RetryDelayPolicy.PROGRESSIVE)
+
                         while (true) {
-                            // acquire policy
-                            if (isSequentialFiring) {
-                                if (!isPermitAcquired) {
-                                    permits.acquire();
-                                    isPermitAcquired = true
-                                }
-                            } else {
-                                permits.acquire()
-                            }
-
-                            val allSettings = effectiveSettings(settings, potato.settings, ctx)
-
-                            val retryLimit = allSettings.lastSettingWithDefault<RetryLimit>(RetryLimit(RetryLimit.DEFAULT)).count
-                            val retryDelayPolicy = allSettings.lastSettingWithDefault<RetryDelayPolicy>(RetryDelayPolicy.PROGRESSIVE)
-
-                            var retryDelayMs: Long
                             try {
                                 val r = fireOne(potato, attempt, ctx, allSettings)
-
-                                results.add(r)
+                                syncResults.add(r)
                                 return@submit
                             } catch (t: Throwable) {
                                 if (t is RequestSendingFailureException && attempt < retryLimit) {
-                                    retryDelayMs = backoff(attempt++, retryDelayPolicy) // compute delay
+                                    Thread.sleep(backoff(attempt++, retryDelayPolicy))
                                 } else {
                                     throw t
                                 }
-                            } finally {
-                                // in PARALLEL release per attempt; in SEQUENTIAL keep the single permit
-                                if (isParallelFiring) permits.release()
                             }
-
-                            // sleep after releasing (parallel) or while holding (sequential)
-                            sleep(retryDelayMs)
                         }
                     } finally {
-                        if (isSequentialFiring && isPermitAcquired) permits.release() // release the one held permit at the end
+                        permits.release()
                     }
                 }
             }
 
             futures.forEach { f ->
-                try {
-                    f.get()
-                } catch (t: Throwable) {
+                try { f.get() } catch (t: Throwable) {
                     val cause = t.cause ?: t
                     when (cause) {
                         is PotatoCannonException -> throw cause
@@ -223,7 +225,8 @@ class Cannon {
             pool.awaitTermination(5, TimeUnit.MINUTES)
         }
 
-        return results.toList()
+        return syncResults.toList()
+
     }
 
     private fun backoff(attempt: Int, backoffStrategy: RetryDelayPolicy): Long {
@@ -232,14 +235,6 @@ class Cannon {
         }
         val steps = listOf(10L, 25L, 50L, 100L, 200L)
         return if (attempt < steps.size) steps[attempt] else steps.last() * (attempt - steps.size + 2)
-    }
-
-    private fun sleep(ms: Long) {
-        try {
-            Thread.sleep(ms)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
     }
 
     private fun fireOne(potato: Potato, currentAttempt: Int, context: CannonContext, allSettings: List<PotatoCannonSetting>): Result {
@@ -393,10 +388,8 @@ class Cannon {
             protocol = wireResponse.httpVersion
         )
 
-        val captureToContexts = allSettings
+        allSettings
             .filterIsInstance<CaptureToContext>()
-
-        captureToContexts
             .forEach {
                 context[it.key] = it.f(result)
             }

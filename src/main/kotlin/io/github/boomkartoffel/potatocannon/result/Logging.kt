@@ -4,12 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.github.boomkartoffel.potatocannon.potato.BinaryBody
 import io.github.boomkartoffel.potatocannon.potato.PotatoBody
 import io.github.boomkartoffel.potatocannon.potato.TextBody
-import io.github.boomkartoffel.potatocannon.strategy.LogExclude
-import io.github.boomkartoffel.potatocannon.strategy.Logging
 import io.github.boomkartoffel.potatocannon.strategy.ExpectationResult
 import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
-import kotlin.collections.component1
-import kotlin.collections.component2
+import io.github.boomkartoffel.potatocannon.strategy.LogExclude
+import io.github.boomkartoffel.potatocannon.strategy.Logging
 
 private const val ANSI_RESET = "\u001B[0m"
 private const val ANSI_GREEN = "\u001B[32m"
@@ -91,7 +89,7 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
     if (!responseBody.isEmpty() && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
         builder.appendLine("|    Body:")
 
-        builder.appendLine(responseText()?.prettifyIndented())
+        builder.appendLine(responseText().prettifyIndented())
     }
 
     val greenCheck = "$ANSI_GREEN✔$ANSI_RESET"

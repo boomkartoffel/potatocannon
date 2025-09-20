@@ -837,7 +837,7 @@ class PotatoCannonTest {
                 result.requestHeaders["Append-Header"] shouldContainExactly listOf("AppendValue", "AppendValue2")
             },
             Expectation("Header Append Check -> contains 2 elements") { result ->
-                result.requestHeaders["Append-Header"]?.size shouldBe 2
+                result.requestHeaders["Append-Header"].size shouldBe 2
             })
 
         val newPot = appendPotato
@@ -850,7 +850,7 @@ class PotatoCannonTest {
             CustomHeader("Append-Header", "AppendValue2", HeaderUpdateStrategy.OVERWRITE),
             Expectation("Header Append Check -> contains 1 element") { result ->
                 result.requestHeaders["Append-Header"] shouldContainExactly listOf("AppendValue2")
-                result.requestHeaders["Append-Header"]?.size shouldBe 1
+                result.requestHeaders["Append-Header"].size shouldBe 1
             })
 
         cannon.fire(newPot, overwritePotato)
@@ -1150,12 +1150,12 @@ class PotatoCannonTest {
                     result.responseText() shouldBe "Hey ya! Great to see you here. BTW, nothing is configured here. Create a mock server on Beeceptor.com"
                 },
                 Expectation("Only one content type is provided and that is XML") { result ->
-                    result.requestHeaders["Content-Type"]?.size shouldBe 1
-                    result.requestHeaders["Content-Type"]?.first() shouldBe "application/xml"
+                    result.requestHeaders["Content-Type"].size shouldBe 1
+                    result.requestHeaders["Content-Type"].first() shouldBe "application/xml"
                 },
                 Expectation("Only one Auth Header type is provided and that is the Bearer token") { result ->
-                    result.requestHeaders["Authorization"]?.size shouldBe 1
-                    result.requestHeaders["Authorization"]?.first() shouldBe "Bearer mytoken"
+                    result.requestHeaders["Authorization"].size shouldBe 1
+                    result.requestHeaders["Authorization"].first() shouldBe "Bearer mytoken"
                 })
         )
 
@@ -1310,7 +1310,7 @@ class PotatoCannonTest {
 
         baseCannon
             .withFireMode(FireMode.SEQUENTIAL)
-            .addSettings(CannonContext().also { it["test"] = "test" })
+            .withContext(CannonContext().also { it["test"] = "test" })
             .fire(
                 firstPotato, secondPotato
             )
