@@ -1,5 +1,8 @@
 package io.github.boomkartoffel.potatocannon.strategy
 
+import io.github.boomkartoffel.potatocannon.strategy.Logging.FULL
+
+
 /**
  * Defines the verbosity level of logging.
  *
@@ -42,6 +45,7 @@ enum class Logging : CannonSetting, PotatoSetting {
  * Useful for reducing noise or hiding sensitive data in logs.
  *
  * There is no default exclusion, so all details are logged unless specified otherwise.
+ * @since 0.1.0
  */
 enum class LogExclude : CannonSetting, PotatoSetting {
     /**

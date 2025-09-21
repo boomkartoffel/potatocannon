@@ -1,5 +1,4 @@
 package io.github.boomkartoffel.potatocannon.exception
-import io.github.boomkartoffel.potatocannon.potato.HttpMethod
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.strategy.CannonContext
 import java.util.concurrent.CancellationException
@@ -77,14 +76,9 @@ class RequestPreparationException internal constructor(
  * Emitted when an attempt to **send** the request fails (I/O, timeouts, connection issues).
  *
  * This exception is thrown per attempt so that retry logic can decide whether to retry.
- * The [attempt] number is 1-based (first attempt is 1).
- *
- * @property attempt The 1-based attempt number that failed.
  * @since 0.1.0
  */
 class RequestSendingFailureException internal constructor(
-    cause: Throwable,
-    attempt: Int,
-    method: HttpMethod,
-    url: String
-) : PotatoCannonException("Failed to send ${method.name} request to $url within $attempt attempts: ${cause.message}", cause)
+    message: String,
+    cause: Throwable
+) : PotatoCannonException(message, cause)

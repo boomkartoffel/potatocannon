@@ -2,7 +2,6 @@ import io.github.boomkartoffel.potatocannon.TestBackend;
 import io.github.boomkartoffel.potatocannon.cannon.Cannon;
 import io.github.boomkartoffel.potatocannon.potato.HttpMethod;
 import io.github.boomkartoffel.potatocannon.potato.Potato;
-import io.github.boomkartoffel.potatocannon.result.Result;
 import io.github.boomkartoffel.potatocannon.strategy.*;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -12,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Random;
 
-import static io.github.boomkartoffel.potatocannon.strategy.ContextStrategyKt.resolveFromContext;
+import static io.github.boomkartoffel.potatocannon.strategy.ContextKt.resolveFromContext;
 
 public class PotatoCannonJavaTest {
 
@@ -54,7 +53,7 @@ public class PotatoCannonJavaTest {
     @Test
     public void context_works_in_Java() {
 
-        var capture = new CaptureToContext("key", Result::responseText);
+        var capture = new CaptureToContext("key", result -> "Hello");
         var retrieve = resolveFromContext(ctx -> {
             var key = ctx.get("key", String.class);
             return new QueryParam("fromContext", key);

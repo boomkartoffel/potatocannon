@@ -4,10 +4,7 @@ import io.github.boomkartoffel.potatocannon.exception.PotatoCannonException
 import io.github.boomkartoffel.potatocannon.exception.RequestExecutionException
 import io.github.boomkartoffel.potatocannon.exception.RequestPreparationException
 import io.github.boomkartoffel.potatocannon.exception.RequestSendingFailureException
-import io.github.boomkartoffel.potatocannon.potato.BinaryBody
-import io.github.boomkartoffel.potatocannon.potato.HttpMethod
-import io.github.boomkartoffel.potatocannon.potato.Potato
-import io.github.boomkartoffel.potatocannon.potato.TextBody
+import io.github.boomkartoffel.potatocannon.potato.*
 import io.github.boomkartoffel.potatocannon.result.Headers
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.result.log
@@ -158,7 +155,7 @@ class Cannon {
     /**
      * Fires a list of [Potato] requests according to the configured [FireMode].
      *
-     * If no [FireMode] is specified, the default is [FireMode.PARALLEL].
+     * If no [FireMode] is specified, the default is [FireMode.PARALLEL] (except when pacing is used, in which case it switches to [FireMode.SEQUENTIAL]).
      *
      * @param potatoes The list of HTTP requests to fire.
      * @return A list of [Result] objects representing the responses.
@@ -166,74 +163,47 @@ class Cannon {
      */
     fun fire(potatoes: List<Potato>): List<Result> {
         val ctx = settings.lastSettingWithDefault<CannonContext>(CannonContext())
-        val mode = settings.lastSettingWithDefault<FireMode>(FireMode.PARALLEL)
-        val results = mutableListOf<Result>()
+        val configuredMode = settings.lastSettingWithDefault<FireMode>(FireMode.PARALLEL)
+        val pacing = settings.lastSettingWithDefault<Pacing>(Pacing(0))
+        val mode = if (!pacing.isZeroPacing) FireMode.SEQUENTIAL else configuredMode
+
+        val results = Collections.synchronizedList(mutableListOf<Result>())
 
         if (mode == FireMode.SEQUENTIAL) {
-            // Strict in-order execution
-            potatoes.forEach { potato ->
-                val allSettings = effectiveSettings(settings, potato.settings, ctx)
-                var attempt = 0
-                val retryLimit = allSettings.lastSettingWithDefault<RetryLimit>(RetryLimit(RetryLimit.DEFAULT)).count
-                val retryDelayPolicy = allSettings.lastSettingWithDefault<RetryDelayPolicy>(RetryDelayPolicy.PROGRESSIVE)
+            var first = true
 
-                while (true) {
-                    try {
-                        val r = fireOne(potato, attempt, ctx, allSettings)
-                        results.add(r)
-                        break
-                    } catch (t: Throwable) {
-                        if (t is RequestSendingFailureException && attempt < retryLimit) {
-                            Thread.sleep(backoff(attempt++, retryDelayPolicy))
-                        } else {
-                            when (t) {
-                                is PotatoCannonException -> throw t
-                                is AssertionError -> throw t
-                                else -> throw RequestExecutionException(t)
-                            }
-                        }
-                    }
-                }
+            potatoes.forEach { potato ->
+                if (!first && !pacing.isZeroPacing) Thread.sleep(pacing.intervalMillis(ctx))
+                first = false
+
+                val effSettings = effectiveSettings(settings, potato.settings, ctx)
+                results += runPotatoWithRetries(potato, ctx, effSettings)
+
             }
             return results.toList()
         }
 
-        val maxConcurrent = settings.lastSettingWithDefault<ConcurrencyLimit>(ConcurrencyLimit(ConcurrencyLimit.DEFAULT)).value
+        // PARALLEL
+        val maxConcurrent =
+            settings.lastSettingWithDefault<ConcurrencyLimit>(ConcurrencyLimit(ConcurrencyLimit.DEFAULT)).value
         val permits = Semaphore(maxConcurrent, false)
         val pool: ExecutorService = ParallelExecutorService.taskExecutor()
-        val syncResults = Collections.synchronizedList(mutableListOf<Result>())
 
         try {
-            val futures = potatoes.map { potato ->
-                pool.submit {
-                    var attempt = 0
-                    try {
-                        permits.acquire()
-                        val allSettings = effectiveSettings(settings, potato.settings, ctx)
-                        val retryLimit = allSettings.lastSettingWithDefault<RetryLimit>(RetryLimit(RetryLimit.DEFAULT)).count
-                        val retryDelayPolicy = allSettings.lastSettingWithDefault<RetryDelayPolicy>(RetryDelayPolicy.PROGRESSIVE)
-
-                        while (true) {
-                            try {
-                                val r = fireOne(potato, attempt, ctx, allSettings)
-                                syncResults.add(r)
-                                return@submit
-                            } catch (t: Throwable) {
-                                if (t is RequestSendingFailureException && attempt < retryLimit) {
-                                    Thread.sleep(backoff(attempt++, retryDelayPolicy))
-                                } else {
-                                    throw t
-                                }
-                            }
-                        }
-                    } finally {
-                        permits.release()
+            val tasks = potatoes.map { potato ->
+                Callable {
+                    withPermit(permits) {
+                        val effSettings = effectiveSettings(settings, potato.settings, ctx)
+                        runPotatoWithRetries(potato, ctx, effSettings)
                     }
                 }
             }
 
+            val futures = pool.invokeAll(tasks)
             futures.forEach { f ->
-                try { f.get() } catch (t: Throwable) {
+                try {
+                    results += f.get()
+                } catch (t: Throwable) {
                     val cause = t.cause ?: t
                     when (cause) {
                         is PotatoCannonException -> throw cause
@@ -247,19 +217,58 @@ class Cannon {
             pool.awaitTermination(5, TimeUnit.MINUTES)
         }
 
-        return syncResults.toList()
-
+        return results.toList()
     }
 
-    private fun backoff(attempt: Int, backoffStrategy: RetryDelayPolicy): Long {
-        if (backoffStrategy == RetryDelayPolicy.NONE) {
-            return 0
+    private inline fun <T> withPermit(sem: Semaphore, block: () -> T): T {
+        sem.acquire()
+        try {
+            return block()
+        } finally {
+            sem.release()
         }
-        val steps = listOf(10L, 25L, 50L, 100L, 200L)
-        return if (attempt < steps.size) steps[attempt] else steps.last() * (attempt - steps.size + 2)
     }
 
-    private fun fireOne(potato: Potato, currentAttempt: Int, context: CannonContext, allSettings: List<PotatoCannonSetting>): Result {
+    private fun runPotatoWithRetries(
+        potato: Potato,
+        ctx: CannonContext,
+        settings: List<PotatoCannonSetting>
+    ): Result {
+        var attempt = 0
+        val retryLimit = settings.lastSettingWithDefault<RetryLimit>(RetryLimit(RetryLimit.DEFAULT)).count
+        val retryPolicy = settings.lastSettingWithDefault<RetryDelay>(RetryDelay(RetryDelayPolicy.PROGRESSIVE))
+        while (true) {
+            try {
+                return fireOne(potato, attempt, ctx, settings)
+            } catch (t: Throwable) {
+                if (t is RequestSendingFailureException && attempt < retryLimit) {
+                    val backOffTime = backoff(attempt++, ctx, retryPolicy)
+                    if (backOffTime == 0L) {
+                        continue
+                    }
+                    Thread.sleep(backOffTime)
+                } else {
+                    when (t) {
+                        is PotatoCannonException -> throw t
+                        is AssertionError -> throw t
+                        else -> throw RequestExecutionException(t)
+                    }
+                }
+            }
+        }
+    }
+
+
+    private fun backoff(attempt: Int, ctx: CannonContext, backoffStrategy: RetryDelay): Long {
+        return backoffStrategy.delayMillis(attempt, ctx)
+    }
+
+    private fun fireOne(
+        potato: Potato,
+        currentAttempt: Int,
+        context: CannonContext,
+        allSettings: List<PotatoCannonSetting>
+    ): Result {
 
         val allQueryParams = mutableMapOf<String, List<String>>()
 
@@ -314,11 +323,23 @@ class Cannon {
 
         val body = potato.body
 
-        when (body) {
-            is TextBody -> {
-                builder.setBody(body.content, null)
+        val bodyToUse: ConcretePotatoBody? = when (body) {
+            is BodyFromContext -> {
+                try {
+                    body.content(context)
+                } catch (t: Throwable) {
+                    throw RequestPreparationException("Failed to resolve BodyFromContext", t)
+                }
+            }
+            null -> null
+            else -> body as ConcretePotatoBody
+        }
 
-                if (body.includeCharset) {
+        when (bodyToUse) {
+            is TextPotatoBody -> {
+                builder.setBody(bodyToUse.content, null)
+
+                if (bodyToUse.includeCharset) {
                     val currentContentType = findHeaderValue(allHeaders, "Content-Type")
                         ?: throw RequestPreparationException(
                             "includeCharset is true but no Content-Type header is present; " +
@@ -329,15 +350,15 @@ class Cannon {
                     val amended = if (currentContentType.contains("charset=", ignoreCase = true)) {
                         currentContentType
                     } else {
-                        "$currentContentType; charset=${body.charset.name()}"
+                        "$currentContentType; charset=${bodyToUse.charset.name()}"
                     }
 
                     builder.setHeader("Content-Type", amended) // overwrite
                 }
             }
 
-            is BinaryBody -> {
-                builder.setBody(body.content, null)
+            is BinaryPotatoBody -> {
+                builder.setBody(bodyToUse.content, null)
             }
 
             null -> Unit
@@ -362,7 +383,8 @@ class Cannon {
             .filterIsInstance<Check>()
             .map { Expectation(it) }
 
-        val timeout = allSettings.lastSettingWithDefault<RequestTimeout>(RequestTimeout(RequestTimeout.DEFAULT)).durationMillis
+        val timeout =
+            allSettings.lastSettingWithDefault<RequestTimeout>(RequestTimeout(RequestTimeout.DEFAULT)).durationMillis
 
         val ctx = HttpClientContext.create()
 
@@ -387,7 +409,10 @@ class Cannon {
                 httpVersion = ctx.protocolVersion.toNegotiatedProtocol()
             )
         } catch (t: Throwable) {
-            throw RequestSendingFailureException(t, currentAttempt + 1, potato.method, fullUrl)
+            throw RequestSendingFailureException(
+                "Failed to send ${potato.method} request to $fullUrl within ${currentAttempt + 1} attempts: ${t.message}",
+                t
+            )
         }
 
         val finalRequestHeaders: Map<String, List<String>> =
@@ -400,6 +425,7 @@ class Cannon {
             potato = potato,
             fullUrl = fullUrl,
             statusCode = wireResponse.statusCode,
+            requestBody = bodyToUse,
             responseBody = wireResponse.body,
             responseHeaders = Headers(wireResponse.headers),
             requestHeaders = Headers(finalRequestHeaders),
@@ -413,7 +439,7 @@ class Cannon {
         allSettings
             .filterIsInstance<CaptureToContext>()
             .forEach {
-                context[it.key] = it.f(result)
+                context[it.key] = it.fn(result, context)
             }
 
         val expectationResults = expectations

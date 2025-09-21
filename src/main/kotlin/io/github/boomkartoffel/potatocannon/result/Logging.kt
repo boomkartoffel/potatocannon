@@ -1,9 +1,7 @@
 package io.github.boomkartoffel.potatocannon.result
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import io.github.boomkartoffel.potatocannon.potato.BinaryBody
-import io.github.boomkartoffel.potatocannon.potato.PotatoBody
-import io.github.boomkartoffel.potatocannon.potato.TextBody
+import io.github.boomkartoffel.potatocannon.potato.ConcretePotatoBody
 import io.github.boomkartoffel.potatocannon.strategy.ExpectationResult
 import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
 import io.github.boomkartoffel.potatocannon.strategy.LogExclude
@@ -19,7 +17,12 @@ private object Json {
     val mapper: ObjectMapper = ObjectMapper()
 }
 
-internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expectationResults: List<ExpectationResult>, logCommentary: List<LogCommentary>) {
+internal fun Result.log(
+    strategy: Logging,
+    logExcludes: Set<LogExclude>,
+    expectationResults: List<ExpectationResult>,
+    logCommentary: List<LogCommentary>
+) {
 
     if (strategy == Logging.OFF) return
 
@@ -62,9 +65,9 @@ internal fun Result.log(strategy: Logging, logExcludes: Set<LogExclude>, expecta
 
     builder.appendLine("|    Protocol:       ${protocol.token}")
 
-    if (potato.body != null && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
+    if (requestBody != null && strategy >= Logging.FULL && logExcludes.none { it == LogExclude.BODY }) {
         builder.appendLine("|    Body:")
-        builder.appendLine(potato.body.prettifyIndented())
+        builder.appendLine(requestBody.prettifyIndented())
     }
 
     if (attempts > 1) {
@@ -184,12 +187,7 @@ private val sensitiveHeaderNames = setOf(
 )
 
 
-private fun PotatoBody.prettifyIndented(): String {
-    return when (this) {
-        is BinaryBody -> "|      " + this.content.joinToString(separator = "") { it.toString(16).padStart(2, '0') }
-        is TextBody -> this.content.prettifyIndented()
-    }
-}
+private fun ConcretePotatoBody?.prettifyIndented(): String = this?.getContentAsString().prettifyIndented()
 
 private fun String?.prettifyIndented(): String {
     val prefix = "|      "

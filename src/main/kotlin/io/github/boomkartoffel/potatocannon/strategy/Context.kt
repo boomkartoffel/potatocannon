@@ -74,31 +74,67 @@ class CannonContext : CannonSetting {
         }
         return type.cast(v)
     }
+
+    /**
+     * Retrieves the value for [key] as an instance of [type].
+     *
+     * @param key the context key to look up
+     * @param type the expected runtime class of the value
+     * @return the value for [key] cast to [T] or null if the key is not present or if the value exists but is not of type [T]
+     * @since 0.1.0
+     */
+    fun <T : Any> getOrNull(key: String, type: Class<T>): T? {
+        val v = map[key] ?: return null
+        if (!type.isInstance(v)) {
+            return null
+        }
+        return type.cast(v)
+    }
 }
 
 
 /**
- * Captures a value from a [Result] and writes it into the shared [CannonContext] after the request completes but before verification.
+ * Captures a value from a [Result] and writes it into the shared [CannonContext]
+ * **after** the request completes but **before** verification/expectations run.
  *
- * Typical use: extract an ID or token from one response and reuse it in subsequent requests.
+ * Use this to extract an ID/token/etc. from one response and reuse it in later requests.
  *
- * ### Example
+ * ### Kotlin example
+ * ```kotlin
+ * // Save the response text as "myKey"
+ * CaptureToContext("myKey") { it.responseText() }
+ *
+ * // Save a derived value that also reads from context
+ * CaptureToContext("nextNumber") { r, ctx ->
+ *     val prev = ctx.get<Int>("counter")
+ *     prev + 1
+ * }
  * ```
- * // Save the response text as "myKey" in the context
- * CaptureToContext("myKey") { r -> r.responseText() }
+ *
+ * ### Java example
+ * ```java
+ * // Save the response text as "myKey"
+ * CaptureToContext capture = new CaptureToContext("myKey", res -> res.responseText());
  * ```
  *
- * Later, you can retrieve it using a [ResolveFromContext] setting:
- *
+ * Later, retrieve it via [ResolveFromContext]:
+ * ```kotlin
+ * ResolveFromContext { ctx -> CustomHeader("X-My-Key", ctx.get<String>("myKey")) }
  * ```
- * ResolveFromContext { ctx -> CustomHeader("X-My-Key", ctx["myKey"]) }
- * ```
  *
- * @param key the context key to write to
- * @param f   function that computes the value from the [Result]
+ * Notes:
+ * - If the same `key` already exists, this overwrites the previous value.
+ * - In parallel mode, ensure keys are unique or namespaced to avoid collisions.
+ *
+ * @param key Context key to write to.
+ * @param fn   Function that computes the value from the [Result] and current [CannonContext].
  * @since 0.1.0
  */
-class CaptureToContext(val key: String, val f: (Result) -> Any) : PotatoSetting
+class CaptureToContext(val key: String, val fn: (Result, CannonContext) -> Any) : PotatoSetting {
+
+    /** Convenience: capture using only the Result (ignores the context). */
+    constructor(key: String, fn: (Result) -> Any) : this(key, { r, _ -> fn(r) })
+}
 
 
 /**

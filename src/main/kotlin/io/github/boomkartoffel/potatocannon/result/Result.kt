@@ -2,6 +2,7 @@ package io.github.boomkartoffel.potatocannon.result
 
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
+import io.github.boomkartoffel.potatocannon.potato.ConcretePotatoBody
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
 import io.github.boomkartoffel.potatocannon.strategy.NegotiatedProtocol
@@ -42,6 +43,7 @@ class Headers internal constructor(rawHeaders: Map<String, List<String>>) {
  * @property potato The original [Potato] that was fired.
  * @property fullUrl The full URL used in the request, including query parameters.
  * @property statusCode The HTTP response status code (e.g., 200, 404).
+ * @property requestBody The [ConcretePotatoBody] sent with the request, or `null` if no body was sent.
  * @property responseBody The raw response body as a [ByteArray]
  * @property requestHeaders The [Headers] sent with the request.
  * @property responseHeaders The [Headers] received in the response.
@@ -54,6 +56,7 @@ class Result internal constructor(
     val potato: Potato,
     val fullUrl: String,
     val statusCode: Int,
+    val requestBody: ConcretePotatoBody?,
     val responseBody: ByteArray,
     val requestHeaders: Headers,
     val responseHeaders: Headers,

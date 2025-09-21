@@ -6,10 +6,7 @@ import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureExce
 import io.github.boomkartoffel.potatocannon.exception.RequestPreparationException
 import io.github.boomkartoffel.potatocannon.exception.RequestSendingFailureException
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
-import io.github.boomkartoffel.potatocannon.potato.BinaryBody
-import io.github.boomkartoffel.potatocannon.potato.HttpMethod
-import io.github.boomkartoffel.potatocannon.potato.Potato
-import io.github.boomkartoffel.potatocannon.potato.TextBody
+import io.github.boomkartoffel.potatocannon.potato.*
 import io.github.boomkartoffel.potatocannon.result.DeserializationFormat
 import io.github.boomkartoffel.potatocannon.result.Deserializer
 import io.github.boomkartoffel.potatocannon.result.Result
@@ -25,11 +22,15 @@ import io.kotest.matchers.longs.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.types.shouldBeTypeOf
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
+import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.time.*
 import java.util.stream.Stream
 import kotlin.properties.Delegates
@@ -264,7 +265,7 @@ class PotatoCannonTest {
 
         val perAttemptTimeoutMs = 100
         val retryCount = 11                 // 11 retries -> 12 attempts total
-        val finalOkCostMs = 10              // your estimate for the successful attempt
+        val finalOkCostMs = 10              // estimate for the successful attempt
         val backoffSteps = listOf(10, 25, 50, 100, 200, 400, 600, 800, 1000, 1200, 1400)
 
         // Ideal path: 11 timed-out attempts + progressive backoffs + final success
@@ -298,16 +299,16 @@ class PotatoCannonTest {
             method = HttpMethod.POST, path = "/timeout",
             RetryLimit(11),
             RequestTimeout.of(100),
-            RetryDelayPolicy.NONE,
+            RetryDelay(RetryDelayPolicy.NONE),
             QueryParam("id", "RetryTestNoBackoff"),
             QueryParam("returnOkAfter", "12"),
         )
 
         val perAttemptTimeoutMs = 100
         val retryCount = 11                 // 11 retries -> 12 attempts total
-        val finalOkCostMs = 10              // your estimate for the successful attempt
+        val finalOkCostMs = 10              // estimate for the successful attempt
 
-        // Ideal path: 11 timed-out attempts + progressive backoffs + final success
+        // Ideal path: 11 timed-out attempts +  final success
         val baseMs = (perAttemptTimeoutMs * retryCount) + finalOkCostMs
 
         // Expected misc overhead (scheduling, logging, GC, timing fuzz)
@@ -326,6 +327,129 @@ class PotatoCannonTest {
         }
 
         println("12 attempts took $elapsedMs ms (expected ≈ $targetMs ms; window [$minMs, $maxMs] ms)")
+
+        elapsedMs shouldBeGreaterThanOrEqual minMs
+        elapsedMs shouldBeLessThanOrEqual maxMs
+    }
+
+    @Test
+    fun `12 Attempts with a constant retry of 100 ms take about 1200ms`() {
+
+        val perAttemptTimeoutMs = 100L
+        val retryCount = 11
+        val finalOkCostMs = 5
+        val retryDelay = 150L
+
+        val timeoutPotato = Potato(
+            method = HttpMethod.POST,
+            path = "/timeout",
+            RetryLimit(retryCount),
+            RequestTimeout.of(perAttemptTimeoutMs),
+            RetryDelay.ofMillis(retryDelay),
+            QueryParam("id", "RetryTestConstantBackoff"),
+            QueryParam("returnOkAfter", "12"),
+        )
+
+
+        // Ideal path: 11 timed-out attempts + constant backoff + final success
+        val baseMs = (perAttemptTimeoutMs * retryCount) + (retryDelay * retryCount) + finalOkCostMs
+
+        // Expected misc overhead (scheduling, logging, GC, timing fuzz)
+        val miscOverheadMs = 10 * (retryCount + 1)
+
+        val targetMs = baseMs + miscOverheadMs
+
+        val pctSlack = 0.03                     // ±3% headroom for CI/jitter
+        val minMs = (targetMs * (1 - pctSlack)).toLong()  // lower bound
+        val maxMs = (targetMs * (1 + pctSlack)).toLong()  // upper bound
+
+        val elapsedMs = measureTimeMillis {
+            baseCannon
+                .addSettings(expect12Attempts)
+                .fire(timeoutPotato)
+        }
+
+        println("12 attempts took $elapsedMs ms (expected ≈ $targetMs ms; window [$minMs, $maxMs] ms)")
+
+        elapsedMs shouldBeGreaterThanOrEqual minMs
+        elapsedMs shouldBeLessThanOrEqual maxMs
+    }
+
+    @Test
+    fun `12 Potatoes with Pacing take about 1000ms`() {
+        val countPotatoes = 12
+        val responseTime = 2              // estimate for the successful attempt
+        val pacing = 250L
+
+        val potatoes = Potato(
+            method = HttpMethod.POST,
+            path = "/test"
+        )*countPotatoes
+
+        val baseMs = (responseTime * countPotatoes) + (pacing * (countPotatoes- 1))
+
+        val miscOverheadMs = 10 * (countPotatoes)
+
+        val targetMs = baseMs + miscOverheadMs
+
+        val pctSlack = 0.03                     // ±3% headroom for CI/jitter
+        val minMs = (targetMs * (1 - pctSlack)).toLong()  // lower bound
+        val maxMs = (targetMs * (1 + pctSlack)).toLong()  // upper bound
+
+        val elapsedMs = measureTimeMillis {
+            baseCannon
+                .addSettings(Pacing(pacing))
+                .fire(potatoes)
+        }
+
+        println("12 Potatoes took $elapsedMs ms (expected ≈ $targetMs ms; window [$minMs, $maxMs] ms)")
+
+        elapsedMs shouldBeGreaterThanOrEqual minMs
+        elapsedMs shouldBeLessThanOrEqual maxMs
+    }
+
+    @Test
+    fun `Pacing can be customized with data from CannonContext and according to a custom function`() {
+        val countPotatoes = 10
+        val responseTime = 2
+        val pacing = listOf(0L,0,0,800,800,1000,1000,2000,2000)
+
+        val funkyPacing = Pacing {
+            val currentCall = it.get<Int>("call")
+            pacing[currentCall]
+        }
+
+        val increaseCallCounter = CaptureToContext("call") { _, ctx ->
+            val currentCall = ctx.get<Int>("call")
+            currentCall + 1
+        }
+
+        val ctx = CannonContext().apply { this["call"] = -1 }
+
+        val potatoes = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            increaseCallCounter
+        )*countPotatoes
+
+        val baseMs = (responseTime * countPotatoes) + pacing.sum()
+
+        val miscOverheadMs = 10 * (countPotatoes)
+
+        val targetMs = baseMs + miscOverheadMs
+
+        val pctSlack = 0.03                     // ±3% headroom for CI/jitter
+        val minMs = (targetMs * (1 - pctSlack)).toLong()  // lower bound
+        val maxMs = (targetMs * (1 + pctSlack)).toLong()  // upper bound
+
+        val elapsedMs = measureTimeMillis {
+            baseCannon
+                .withContext(ctx)
+                .addSettings(funkyPacing)
+                .fire(potatoes)
+        }
+
+        println("$countPotatoes Potatoes took $elapsedMs ms (expected ≈ $targetMs ms; window [$minMs, $maxMs] ms)")
 
         elapsedMs shouldBeGreaterThanOrEqual minMs
         elapsedMs shouldBeLessThanOrEqual maxMs
@@ -405,7 +529,7 @@ class PotatoCannonTest {
             baseCannon
                 .addSettings(ConcurrencyLimit(500))
                 .addSettings(RetryLimit(100))
-                .addSettings(RetryDelayPolicy.NONE)
+                .addSettings(RetryDelay(RetryDelayPolicy.NONE))
                 .fire(potato * 500)
         }
 
@@ -413,7 +537,7 @@ class PotatoCannonTest {
             baseCannon
                 .addSettings(ConcurrencyLimit(250))
                 .addSettings(RetryLimit(100))
-                .addSettings(RetryDelayPolicy.NONE)
+                .addSettings(RetryDelay(RetryDelayPolicy.NONE))
                 .fire(potato * 500)
         }
 
@@ -428,7 +552,7 @@ class PotatoCannonTest {
         val potato = Potato(
             method = HttpMethod.POST,
             path = "/test",
-            body = TextBody("{ }"),
+            body = TextPotatoBody("{ }"),
             ContentType.JSON,
             expect200StatusCode,
             expectHelloResponseText
@@ -447,7 +571,7 @@ class PotatoCannonTest {
         val potato = Potato(
             method = HttpMethod.POST,
             path = "/test",
-            body = TextBody("{ \"message\": \"hi\" }"),
+            body = TextPotatoBody("{ \"message\": \"hi\" }"),
             settings = listOf(
                 ContentType.JSON,
                 Expectation("Status Code is 200 and return value is Hello") { result ->
@@ -885,43 +1009,43 @@ class PotatoCannonTest {
         }
 
         val defaultPotato = basePotato
-            .withBody(TextBody("test"))
+            .withBody(TextPotatoBody("test"))
             .addExpectation(noContentTypeRequestHeader)
 
         val utf16Potato = basePotato
-            .withBody(TextBody("test", Charsets.UTF_16))
+            .withBody(TextPotatoBody("test", Charsets.UTF_16))
             .addExpectation(noContentTypeRequestHeader)
 
         val utf16PotatoWithContentType = basePotato
-            .withBody(TextBody("test", Charsets.UTF_16))
+            .withBody(TextPotatoBody("test", Charsets.UTF_16))
             .addSettings(ContentType.TEXT_PLAIN)
             .addExpectation(charSetIsNotSet)
 
         val utf16PotatoWithContentTypeAndCharset = basePotato
-            .withBody(TextBody("test", Charsets.UTF_16, true))
+            .withBody(TextPotatoBody("test", Charsets.UTF_16, true))
             .addSettings(ContentType.TEXT_PLAIN)
             .addExpectation(charSetIsUtf16)
 
         val invalidUtf16PotatoWithCharsetAndNoContentType = basePotato
-            .withBody(TextBody("test", Charsets.UTF_16, true))
+            .withBody(TextPotatoBody("test", Charsets.UTF_16, true))
 
         val utf8Potato = basePotato
-            .withBody(TextBody("test", true))
+            .withBody(TextPotatoBody("test", true))
             .addSettings(ContentType.TEXT_PLAIN)
             .addExpectation(charsetIsUtf8)
 
         val invalidContentTypeSettingPotato = basePotato
-            .withBody(TextBody("test", true))
+            .withBody(TextPotatoBody("test", true))
 
         val utf8PotatoWithTextPlain = basePotato
-            .withBody(TextBody("test", true))
+            .withBody(TextPotatoBody("test", true))
             .addSettings(ContentType.TEXT_PLAIN)
             .addExpectation(charsetIsUtf8)
             .addExpectation(textPlainIsSet)
 
 
         val test2 = basePotato
-            .withBody(TextBody("test", true))
+            .withBody(TextPotatoBody("test", true))
             .addSettings(ContentType.TEXT_PLAIN)
             .addExpectation(charsetIsUtf8)
             .addExpectation(textPlainIsSet)
@@ -1015,7 +1139,7 @@ class PotatoCannonTest {
         val basePotato = Potato(
             method = HttpMethod.POST,
             path = "/test-logging",
-            body = TextBody("{ }"),
+            body = TextPotatoBody("{ }"),
         )
 
         val baseLoggingPotatoes = Logging.values().map { logging ->
@@ -1081,7 +1205,7 @@ class PotatoCannonTest {
     @Test
     fun `POST with multiple headers will have later ones overwrite earlier`() {
         val potato = Potato(
-            method = HttpMethod.POST, body = TextBody("{ }"), path = "/test", settings = listOf(
+            method = HttpMethod.POST, body = TextPotatoBody("{ }"), path = "/test", settings = listOf(
                 ContentType.JSON,
                 ContentType.XML,
                 QueryParam("queryPotato", "valuePotato"),
@@ -1140,7 +1264,7 @@ class PotatoCannonTest {
     @Test
     fun `POST with multiple headers to mockserver will have later ones overwrite earlier`() {
         val potato = Potato(
-            method = HttpMethod.POST, body = TextBody("{ }"), path = "/test", settings = listOf(
+            method = HttpMethod.POST, body = TextPotatoBody("{ }"), path = "/test", settings = listOf(
                 ContentType.JSON,
                 ContentType.XML,
                 QueryParam("queryPotato", "valuePotato"),
@@ -1222,7 +1346,7 @@ class PotatoCannonTest {
     fun `TRACE request does not allow a request body`() {
         val potato = Potato(
             method = HttpMethod.TRACE,
-            body = TextBody("{}"),
+            body = TextPotatoBody("{}"),
             path = "/not-available-endpoint",
             settings = listOf(
                 expect400StatusCode
@@ -1250,12 +1374,12 @@ class PotatoCannonTest {
         )
 
         val emptyStringPotato = basePotato
-            .withBody(TextBody(""))
+            .withBody(TextPotatoBody(""))
             .addSettings(hasContentLengthZero)
             .addSettings(LogCommentary("Empty String Body"))
 
         val binaryPotato = basePotato
-            .withBody(BinaryBody(ByteArray(0)))
+            .withBody(BinaryPotatoBody(ByteArray(0)))
             .addSettings(hasContentLengthZero)
             .addSettings(LogCommentary("Empty Binary Body"))
 
@@ -1278,11 +1402,11 @@ class PotatoCannonTest {
             method = HttpMethod.POST,
             path = "/first-call",
             expect200StatusCode,
-            CaptureToContext(keyForSecondCall) {
-                it.responseText()
+            CaptureToContext(keyForSecondCall) { r, _ ->
+                r.responseText()
             },
-            CaptureToContext("attempts") {
-                it.attempts
+            CaptureToContext("attempts") { r, _ ->
+                r.attempts
             },
             resolveFromContext { ctx ->
                 ctx.get<String>("test") shouldBe "test"
@@ -1314,6 +1438,45 @@ class PotatoCannonTest {
             .fire(
                 firstPotato, secondPotato
             )
+
+    }
+
+    @Test
+    fun `Requests can be chained and a Body can be constructed from the CannonContext`() {
+        val ctxKey = "the-key"
+
+        val expectHelloInRequest = Expectation("Has the word Hello in Request Body") { result ->
+            result.requestBody.shouldBeTypeOf<TextPotatoBody> {
+                it.getContentAsString() shouldContain "Hello"
+            }
+        }
+
+        val firstPotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            expect200StatusCode,
+            CaptureToContext(ctxKey) { r ->
+                r.responseText()
+            }
+        )
+
+        val secondPotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            BodyFromContext {
+                val content = it.get<String>(ctxKey)
+                TextPotatoBody("""
+                {
+                    "valueFromFirstCall": "$content"
+                }
+                """.trimIndent())
+            },
+            expectHelloInRequest
+        )
+
+        baseCannon
+            .withFireMode(FireMode.SEQUENTIAL)
+            .fire(firstPotato, secondPotato)
 
     }
 
@@ -1382,7 +1545,7 @@ class PotatoCannonTest {
         val potato = Potato(
             method = HttpMethod.POST,
             path = "/test",
-            body = BinaryBody(binaryContent),
+            body = BinaryPotatoBody(binaryContent),
             ContentType.OCTET_STREAM,
             expect200StatusCode,
             expectHelloResponseText
@@ -1390,6 +1553,73 @@ class PotatoCannonTest {
 
 
         baseCannon.fire(potato)
+    }
+
+    @Test
+    fun `file from test resources can be sent as multipart form-data`() {
+        val resource = javaClass.getResource("/test.jpg")
+            ?: error("Test resource not found: /test.jpg")
+        val path = Paths.get(resource.toURI())
+        val filename = path.fileName.toString()
+        val fileBytes = Files.readAllBytes(path)
+
+        // 2) Build multipart body
+        val boundary = "----potato-${System.nanoTime()}"
+        val bodyBytes = buildMultipartFormData(
+            boundary = boundary,
+            fileFieldName = "file",
+            filename = filename,
+            fileContent = fileBytes,
+            fileMime = "application/octet-stream",
+            extraFields = mapOf("note" to "uploaded from test")
+        )
+
+        // 3) Create Potato with correct Content-Type (include boundary!)
+        val potato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            body = BinaryPotatoBody(bodyBytes),
+            ContentType.OCTET_STREAM,
+            expect200StatusCode
+        )
+
+        // 4) Fire it
+        baseCannon.fire(potato)
+    }
+
+    private fun buildMultipartFormData(
+        boundary: String,
+        fileFieldName: String,
+        filename: String,
+        fileContent: ByteArray,
+        fileMime: String,
+        extraFields: Map<String, String> = emptyMap()
+    ): ByteArray {
+        val CRLF = "\r\n"
+        val out = ByteArrayOutputStream()
+
+        fun write(str: String) = out.write(str.toByteArray(Charsets.UTF_8))
+
+        // Text fields first (optional)
+        for ((name, value) in extraFields) {
+            write("--$boundary$CRLF")
+            write("Content-Disposition: form-data; name=\"$name\"$CRLF")
+            write("Content-Type: text/plain; charset=UTF-8$CRLF$CRLF")
+            write(value)
+            write(CRLF)
+        }
+
+        // File field
+        write("--$boundary$CRLF")
+        write("Content-Disposition: form-data; name=\"$fileFieldName\"; filename=\"$filename\"$CRLF")
+        write("Content-Type: $fileMime$CRLF$CRLF")
+        out.write(fileContent)
+        write(CRLF)
+
+        // Closing boundary
+        write("--$boundary--$CRLF")
+
+        return out.toByteArray()
     }
 
 

@@ -2,75 +2,7 @@ package io.github.boomkartoffel.potatocannon.potato
 
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.strategy.*
-import java.nio.charset.Charset
-import kotlin.text.Charsets.UTF_8
 
-
-/**
- * Represents the body of an HTTP request used by the Potato Cannon.
- *
- * Implementations model different payload forms (text vs. binary).
- *
- * @since 0.1.0
- */
-sealed interface PotatoBody
-
-/**
- * Plain-text request body; sent as-is.
- *
- * @property content Raw textual payload.
- * @property charset Charset used to encode [content] (defaults to UTF-8).
- * @property includeCharset Whether a `charset=...` parameter should be added to the `Content-Type` header
- *                          by whichever component builds headers (typically for `text/...` types).
- *                          Defaults to `false`.
- *                          If `true`, the charset is appended to the `Content-Type` header, e.g.: `Content-Type: text/plain; charset=UTF-8`.
- *                          If `true` AND the `Content-Type` header is missing, the cannon will throw an error.
- * @since 0.1.0
- */
-class TextBody @JvmOverloads constructor(
-    val content: String,
-    val charset: Charset = UTF_8,
-    val includeCharset: Boolean = false
-) : PotatoBody {
-
-    /**
-     * Constructor to set only the include-charset flag while keeping UTF-8.
-     *
-     * Example:
-     * ```
-     * val body = TextBody("hello", true); // UTF-8, and add ; charset=UTF-8 to Content-Type
-     * ```
-     */
-    constructor(content: String, includeCharset: Boolean) : this(
-        content = content,
-        charset = UTF_8,
-        includeCharset = includeCharset
-    )
-}
-
-/**
- * Binary request body.
- *
- * @property content Raw bytes to send as the request payload.
- * @since 0.1.0
- */
-class BinaryBody(val content: ByteArray) : PotatoBody
-
-/**
- * HTTP request methods (RFC 9110).
- *
- * @since 0.1.0
- */
-enum class HttpMethod {
-    GET,
-    POST,
-    PUT,
-    DELETE,
-    PATCH,
-    HEAD,
-    OPTIONS,
-    TRACE
-}
 
 /**
  * Represents an HTTP request definition to be fired by the [Cannon].
@@ -90,9 +22,8 @@ class Potato(
     val method: HttpMethod,
     val path: String,
     val body: PotatoBody?,
-    val settings: List<PotatoSetting> = listOf()
+    val settings: List<PotatoSetting> = listOf(),
 ) {
-
     constructor(
         method: HttpMethod,
         path: String,
