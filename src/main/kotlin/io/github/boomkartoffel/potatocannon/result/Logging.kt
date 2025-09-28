@@ -1,11 +1,21 @@
 package io.github.boomkartoffel.potatocannon.result
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.xml.XmlMapper
 import io.github.boomkartoffel.potatocannon.potato.ConcretePotatoBody
-import io.github.boomkartoffel.potatocannon.strategy.ExpectationResult
-import io.github.boomkartoffel.potatocannon.strategy.LogCommentary
-import io.github.boomkartoffel.potatocannon.strategy.LogExclude
-import io.github.boomkartoffel.potatocannon.strategy.Logging
+import io.github.boomkartoffel.potatocannon.strategy.*
+import org.w3c.dom.Node
+import org.xml.sax.ErrorHandler
+import org.xml.sax.InputSource
+import org.xml.sax.SAXParseException
+import java.io.StringReader
+import java.io.StringWriter
+import javax.xml.XMLConstants
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
 
 private const val ANSI_RESET = "\u001B[0m"
 private const val ANSI_GREEN = "\u001B[32m"
@@ -15,6 +25,7 @@ private const val exclamationSign = "⚠️"
 
 private object Json {
     val mapper: ObjectMapper = ObjectMapper()
+    val xmlMapper : XmlMapper = XmlMapper()
 }
 
 internal fun Result.log(
@@ -131,7 +142,10 @@ internal fun Result.log(
                     "${err::class.simpleName}: ${err.message}".prettifyIndented()
                 }
 
-            builder.appendLine(errorDescriptions.joinToString("\n|\n"))
+            val errorBlock = errorDescriptions.joinToString("\n|\n")
+            if (errorBlock.isNotEmpty()) {
+                builder.appendLine(errorBlock)
+            }
         }
 
         // List named verifications with pass/fail marker
@@ -177,21 +191,12 @@ private fun Map<String, List<String>>.logFilteredHeaders(mask: Boolean): List<St
     }
 }
 
-private val sensitiveHeaderNames = setOf(
-    "authorization", "proxy-authorization",
-    "x-access-token", "x-api-key", "x-auth-token",
-    "x-refresh-token", "x-csrf-token",
-    "token", "id-token", "x-id-token",
-    "authorization-bearer",
-    "cookie", "set-cookie", "set-cookie2"
-)
-
 
 private fun ConcretePotatoBody?.prettifyIndented(): String = this?.getContentAsString().prettifyIndented()
 
 private fun String?.prettifyIndented(): String {
     val prefix = "|      "
-    val bodyContent = prettifyJsonIfPossible() ?: this?.trimIndent().orEmpty()
+    val bodyContent = prettifyJsonIfPossible() ?: prettifyXmlIfPossible() ?:this?.trimIndent().orEmpty()
     return if (bodyContent.isEmpty()) "" else bodyContent.prependEachLine(prefix)
 }
 
@@ -214,3 +219,74 @@ private fun String?.prettifyJsonIfPossible(): String? {
     }
 }
 
+private fun String?.prettifyXmlIfPossible(): String? {
+
+    var s = this?.trim()
+    if (s.isNullOrEmpty()) return null
+
+    // Strip UTF-8 BOM and any junk before first '<'
+    if (s.startsWith('\uFEFF')) {
+        s = s.removePrefix("\uFEFF")
+    }
+    val firstLt = s.indexOf('<')
+    if (firstLt < 0) return null
+    if (firstLt > 0) s = s.substring(firstLt)
+
+    // Cheap precheck to avoid parsing random text
+    if (!s.startsWith('<')) return null
+    if (s.indexOf('>') < 0) return null
+
+    return try {
+        val dbf = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+            setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+            // Block loading external stuff (JDK 8uXX+; ignore if not supported)
+            try {
+                setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+                setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+            } catch (_: Exception) {}
+        }
+
+        val builder = dbf.newDocumentBuilder().apply {
+            setErrorHandler(object : ErrorHandler {
+                override fun warning(e: SAXParseException?) = Unit
+                override fun error(e: SAXParseException?) = Unit
+                override fun fatalError(e: SAXParseException?) = Unit
+            })
+        }
+
+        val doc = builder.parse(InputSource(StringReader(s)))
+
+        fun stripWhitespaceTextNodes(node: Node) {
+            var child = node.firstChild
+            val toRemove = mutableListOf<Node>()
+            while (child != null) {
+                if (child.nodeType == Node.TEXT_NODE) {
+                    if (child.nodeValue?.trim()?.isEmpty() == true) toRemove += child
+                } else if (child.nodeType == Node.ELEMENT_NODE) {
+                    stripWhitespaceTextNodes(child)
+                }
+                child = child.nextSibling
+            }
+            toRemove.forEach { node.removeChild(it) }
+        }
+        stripWhitespaceTextNodes(doc)
+
+        val tf = TransformerFactory.newInstance()
+        val transformer = tf.newTransformer().apply {
+            setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes") // no <?xml ...?>
+            setOutputProperty(OutputKeys.INDENT, "yes")
+            setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2")
+        }
+
+        val sw = StringWriter()
+        transformer.transform(
+            DOMSource(doc),
+            StreamResult(sw)
+        )
+        sw.toString().trim()
+    } catch (_: Exception) {
+        null
+    }
+
+}

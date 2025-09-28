@@ -46,14 +46,14 @@ public class PotatoCannonJavaTest {
                 )
         );
 
-        cannon.fire(potato);
+        cannon.fireWithResults(potato);
     }
 
 
     @Test
     public void context_works_in_Java() {
 
-        var capture = new CaptureToContext("key", result -> "Hello");
+        var capture = CaptureToContext.global("key", result -> "Hello");
         var retrieve = resolveFromContext(ctx -> {
             var key = ctx.get("key", String.class);
             return new QueryParam("fromContext", key);
@@ -77,7 +77,7 @@ public class PotatoCannonJavaTest {
                 )
         );
 
-        cannon.fire(potato, potato2);
+        cannon.fireWithResults(potato, potato2);
     }
 
 

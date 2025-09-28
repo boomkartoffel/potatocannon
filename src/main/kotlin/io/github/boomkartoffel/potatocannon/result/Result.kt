@@ -2,6 +2,10 @@ package io.github.boomkartoffel.potatocannon.result
 
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
+import io.github.boomkartoffel.potatocannon.marshalling.Deserializer
+import io.github.boomkartoffel.potatocannon.marshalling.JsonDeserializer
+import io.github.boomkartoffel.potatocannon.marshalling.WireFormat
+import io.github.boomkartoffel.potatocannon.marshalling.XmlDeserializer
 import io.github.boomkartoffel.potatocannon.potato.ConcretePotatoBody
 import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
@@ -9,7 +13,7 @@ import io.github.boomkartoffel.potatocannon.strategy.NegotiatedProtocol
 import java.nio.charset.Charset
 
 private val defaultCharset = Charsets.UTF_8
-private val defaultFormat = DeserializationFormat.JSON
+private val defaultFormat = WireFormat.JSON
 private const val contentTypeHeaderName = "content-type"
 
 /**
@@ -120,14 +124,14 @@ class Result internal constructor(
      * @throws DeserializationFailureException if deserialization fails.
      * @since 0.1.0
      */
-    fun <T> bodyAsObject(clazz: Class<T>, format: DeserializationFormat): T =
+    fun <T> bodyAsObject(clazz: Class<T>, format: WireFormat): T =
         bodyAsObject(clazz, format, responseCharset())
 
     /**
      * Deserializes the response body into one instance of [T] using the provided [deserializer]
      * and the detected response charset.
      *
-     * @param deserializer A custom [Deserializer] implementation.
+     * @param deserializer A custom [io.github.boomkartoffel.potatocannon.marshalling.Deserializer] implementation.
      * @return A new instance of [T].
      * @throws ResponseBodyMissingException if the response has no body.
      * @throws DeserializationFailureException if deserialization fails.
@@ -138,7 +142,7 @@ class Result internal constructor(
 
     /**
      * Deserializes the response body into one instance of [T] using the given [format]
-     * and [charset]. The underlying deserializer is chosen based on the [DeserializationFormat] and will
+     * and [charset]. The underlying deserializer is chosen based on the [WireFormat] and will
      * apply any configured [DeserializationStrategy].
      *
      * @param format The wire format to use (e.g., JSON or XML).
@@ -148,10 +152,10 @@ class Result internal constructor(
      * @throws DeserializationFailureException if deserialization fails.
      * @since 0.1.0
      */
-    fun <T> bodyAsObject(clazz: Class<T>, format: DeserializationFormat, charset: Charset): T {
+    fun <T> bodyAsObject(clazz: Class<T>, format: WireFormat, charset: Charset): T {
         val deserializer = when (format) {
-            DeserializationFormat.JSON -> JsonDeserializer(deserializationStrategies)
-            DeserializationFormat.XML -> XmlDeserializer(deserializationStrategies)
+            WireFormat.JSON -> JsonDeserializer(deserializationStrategies)
+            WireFormat.XML -> XmlDeserializer(deserializationStrategies)
         }
 
         return bodyAsObject(clazz, deserializer, charset)
@@ -188,13 +192,13 @@ class Result internal constructor(
      * Deserializes the response body into a list of [T] using the given [format]
      * and the detected response charset.
      *
-     * @param format The [DeserializationFormat] to use (e.g., JSON or XML).
+     * @param format The [WireFormat] to use (e.g., JSON or XML).
      * @return A [List] of [T].
      * @throws ResponseBodyMissingException if the response has no body.
      * @throws DeserializationFailureException if deserialization fails.
      * @since 0.1.0
      */
-    fun <T> bodyAsList(clazz: Class<T>, format: DeserializationFormat): List<T> =
+    fun <T> bodyAsList(clazz: Class<T>, format: WireFormat): List<T> =
         bodyAsList(clazz, format, responseCharset())
 
 
@@ -223,10 +227,10 @@ class Result internal constructor(
      * @throws DeserializationFailureException if deserialization fails.
      * @since 0.1.0
      */
-    fun <T> bodyAsList(clazz: Class<T>, format: DeserializationFormat, charset: Charset): List<T> {
+    fun <T> bodyAsList(clazz: Class<T>, format: WireFormat, charset: Charset): List<T> {
         val deserializer = when (format) {
-            DeserializationFormat.JSON -> JsonDeserializer(deserializationStrategies)
-            DeserializationFormat.XML -> XmlDeserializer(deserializationStrategies)
+            WireFormat.JSON -> JsonDeserializer(deserializationStrategies)
+            WireFormat.XML -> XmlDeserializer(deserializationStrategies)
         }
 
         return bodyAsList(clazz, deserializer, charset)

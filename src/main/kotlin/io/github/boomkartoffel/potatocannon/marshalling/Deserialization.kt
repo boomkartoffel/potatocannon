@@ -1,22 +1,16 @@
-package io.github.boomkartoffel.potatocannon.result
+package io.github.boomkartoffel.potatocannon.marshalling
 
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.MapperFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.json.JsonMapper
+import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.dataformat.xml.XmlMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
-import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultDeserializationModule
-
-import io.github.boomkartoffel.potatocannon.strategy.AcceptEmptyStringAsNullObject
-import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveEnums
-import io.github.boomkartoffel.potatocannon.strategy.CaseInsensitiveProperties
-import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
-import io.github.boomkartoffel.potatocannon.strategy.NullCoercion
-import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
-import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode
+import com.fasterxml.jackson.module.kotlin.KotlinFeature
+import com.fasterxml.jackson.module.kotlin.KotlinModule
+import io.github.boomkartoffel.potatocannon.annotation.JsonRoot
+import io.github.boomkartoffel.potatocannon.strategy.*
 
 /**
  * Strategy interface for deserializing objects from a raw string.
@@ -59,7 +53,7 @@ interface Deserializer {
 // - Nulls: strict (respect Kotlin nullability)
 // - Unknown properties: ignored (library-friendly)
 // - Other toggles: off unless specified
-private fun buildMapper(strategies: List<DeserializationStrategy>, format: DeserializationFormat): ObjectMapper {
+private fun buildMapper(strategies: List<DeserializationStrategy>, format: WireFormat): ObjectMapper {
     var nullCoercion: NullCoercion = NullCoercion.STRICT
     var unknownProps: UnknownPropertyMode = UnknownPropertyMode.IGNORE
     var caseInsensitiveProperties = false
@@ -94,11 +88,13 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
     }
 
     val builder = when (format) {
-        DeserializationFormat.JSON -> JsonMapper.builder()
-        DeserializationFormat.XML -> XmlMapper.builder()
+        WireFormat.JSON -> JsonMapper.builder()
+        WireFormat.XML -> XmlMapper.builder()
     }
 
     builder.addModule(kotlinModuleBuilder.build())
+    builder.addModule(JsonAnnotationModule)
+    builder.addModule(XmlAnnotationModule)
 
     when (unknownProps) {
         UnknownPropertyMode.IGNORE -> builder.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -120,26 +116,26 @@ private fun buildMapper(strategies: List<DeserializationStrategy>, format: Deser
 }
 
 internal class JsonDeserializer(deserializationStrategies: List<DeserializationStrategy>) : Deserializer {
-    internal val mapper: ObjectMapper = buildMapper(deserializationStrategies, DeserializationFormat.JSON)
+    internal val mapper: ObjectMapper = buildMapper(deserializationStrategies, WireFormat.JSON)
 
 
     override fun <T> deserializeObject(data: String, targetClass: Class<T>): T {
-        return mapper.readValue(data, targetClass)
+        return mapper.readValueRootAware(data, targetClass)
     }
 
     override fun <T> deserializeList(data: String, targetClass: Class<T>): List<T> {
-        val listType = mapper.typeFactory.constructCollectionType(List::class.java, targetClass)
-        return mapper.readValue(data, listType)
+        return mapper.readListRootAware(data, targetClass)
     }
 }
 
 internal class XmlDeserializer(deserializationStrategies: List<DeserializationStrategy>) : Deserializer {
-    val mapper: ObjectMapper = buildMapper(deserializationStrategies, DeserializationFormat.XML)
+    val mapper: ObjectMapper = buildMapper(deserializationStrategies, WireFormat.XML)
 
 
     override fun <T> deserializeList(data: String, targetClass: Class<T>): List<T> {
         val listType = mapper.typeFactory.constructCollectionType(List::class.java, targetClass)
         return mapper.readValue(data, listType)
+
     }
 
     override fun <T> deserializeObject(data: String, targetClass: Class<T>): T {
@@ -147,23 +143,25 @@ internal class XmlDeserializer(deserializationStrategies: List<DeserializationSt
     }
 }
 
-/**
- * This enum is only relevant when using built-in JSON or XML deserializers.
- * Indicates which format should be used when deserializing response bodies
- * using the library’s built-in default mappers.
- *
- * @see io.github.boomkartoffel.potatocannon.result.Result.bodyAsObject
- * @see io.github.boomkartoffel.potatocannon.result.Result.bodyAsList
- * @since 0.1.0
- */
-enum class DeserializationFormat {
-    /**
-     * Built-in JSON deserialization using a default Jackson ObjectMapper.
-     */
-    JSON,
+private fun <T> ObjectMapper.readValueRootAware(json: String, target: Class<T>): T {
+    val hasRoot = target.isAnnotationPresent(JsonRoot::class.java)
+    val reader = if (hasRoot) {
+        readerFor(target).with(DeserializationFeature.UNWRAP_ROOT_VALUE)
+    } else {
+        readerFor(target).without(DeserializationFeature.UNWRAP_ROOT_VALUE)
+    }
+    return reader.readValue(json)
+}
 
-    /**
-     * Built-in XML deserialization using a default Jackson XmlMapper.
-     */
-    XML,
+
+private fun <T> ObjectMapper.readListRootAware(json: String, target: Class<T>): List<T> {
+    val node = readTree(json)
+
+    require(node.isArray) { "Expected JSON array for List<$target>, got: ${node.nodeType}" }
+
+    val arr = node as ArrayNode
+    return arr.map { elem ->
+        val elemJson = writeValueAsString(elem)
+        readValueRootAware(elemJson, target)
+    }
 }

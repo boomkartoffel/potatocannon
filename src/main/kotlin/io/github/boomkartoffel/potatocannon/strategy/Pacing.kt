@@ -12,7 +12,7 @@ import io.github.boomkartoffel.potatocannon.strategy.Pacing.Companion.of
  * It’s a **throttle** that spaces out when new potatoes begin, without affecting in-flight I/O.
  *
  * You can specify a **constant** interval (in milliseconds) or provide a function
- * that computes the interval from the current [CannonContext].
+ * that computes the interval from the current [PotatoCannonContext].
  *
  * Semantics:
  * - Not applied before the very first potato in a `fire(...)` run.
@@ -35,7 +35,7 @@ import io.github.boomkartoffel.potatocannon.strategy.Pacing.Companion.of
  * @since 0.1.0
  */
 class Pacing private constructor(
-    private val provider: (CannonContext) -> Long,
+    private val provider: (ContextView) -> Long,
     val isZeroPacing: Boolean
 ) : CannonSetting {
 
@@ -76,23 +76,23 @@ class Pacing private constructor(
      * - This function is evaluated the first time **right before the second potato starts**
      *   (i.e., after the first potato has fully finished, including retries), and then
      *   again before each subsequent potato starts.
-     * - Because earlier potatoes may have modified the [CannonContext] (e.g., via
+     * - Because earlier potatoes may have modified the [PotatoCannonContext] (e.g., via
      *   [CaptureToContext]), make sure your logic accounts for those updates.
      * - It is **not** invoked for retries; retries are governed solely by [RetryDelay].
      *
      * Note on validation:
      * - When the function is invoked and the result is out of range, the pacing interval will be coerced into the valid range [0, [MAX_MILLIS]].
      *
-     * @param fn function that computes the interval from the current [CannonContext].
+     * @param fn function that computes the interval from the current [PotatoCannonContext].
      * @throws RequestPreparationException if the function throws when invoked.
      */
-    constructor(fn: (CannonContext) -> Long) : this(fn, isZeroPacing = false)
+    constructor(fn: (ContextView) -> Long) : this(fn, isZeroPacing = false)
 
     /**
-     * Resolve the pacing interval for the given [CannonContext], clamped to [0, MAX_MILLIS].
+     * Resolve the pacing interval for the given [PotatoCannonContext], clamped to [0, MAX_MILLIS].
      * If this instance was created with the function constructor, out-of-range values will throw.
      */
-    fun intervalMillis(ctx: CannonContext): Long {
+    fun intervalMillis(ctx: ContextView): Long {
         val raw = try {
             provider(ctx)
         } catch (t: Throwable) {
@@ -121,7 +121,7 @@ class Pacing private constructor(
          * any value; it will be coerced into [0, MAX_MILLIS] at call time.
          */
         @JvmStatic
-        fun of(fn: (CannonContext) -> Long): Pacing =
+        fun of(fn: (ContextView) -> Long): Pacing =
             Pacing({ ctx -> fn(ctx).coerceIn(0, MAX_MILLIS) }, isZeroPacing = false)
     }
 }

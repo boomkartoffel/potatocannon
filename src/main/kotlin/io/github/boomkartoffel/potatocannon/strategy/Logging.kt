@@ -21,7 +21,7 @@ enum class Logging : CannonSetting, PotatoSetting {
 
     /**
      * Logs the basic request and response metadata:
-     * - HTTP method and path
+     * - HTTP method, version and path
      * - Status code
      * - Execution time
      */
@@ -95,3 +95,12 @@ enum class LogExclude : CannonSetting, PotatoSetting {
      */
     VERIFICATIONS;
 }
+
+internal val sensitiveHeaderNames = setOf(
+    "authorization", "proxy-authorization",
+    "x-access-token", "x-api-key", "x-auth-token",
+    "x-refresh-token", "x-csrf-token",
+    "token", "id-token", "x-id-token",
+    "authorization-bearer",
+    "cookie", "set-cookie", "set-cookie2"
+)

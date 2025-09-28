@@ -1,6 +1,6 @@
 package io.github.boomkartoffel.potatocannon.exception
 import io.github.boomkartoffel.potatocannon.result.Result
-import io.github.boomkartoffel.potatocannon.strategy.CannonContext
+import io.github.boomkartoffel.potatocannon.strategy.PotatoCannonContext
 import java.util.concurrent.CancellationException
 
 sealed class PotatoCannonException(
@@ -61,7 +61,7 @@ class VerificationException internal constructor(
  * - `URI.create(fullUrl)` throws for an invalid URL.
  * - `HttpRequest.Builder.header(...)` throws for illegal names/values.
  * - The charset of content-type is set but no mime type is defined.
- * - Resolving data from [CannonContext] that is missing or of the wrong type
+ * - Resolving data from [PotatoCannonContext] that is missing or of the wrong type
  *
  * The original cause is preserved as [cause].
  *
@@ -82,3 +82,15 @@ class RequestSendingFailureException internal constructor(
     message: String,
     cause: Throwable
 ) : PotatoCannonException(message, cause)
+
+/**
+ * Emitted when a [PotatoCannonContext] operation fails.
+ *
+ * Typical sources:
+ * - Trying to write into a global context if it has not been created
+ *
+ * @since 0.1.0
+ */
+class ContextFailureException internal constructor(
+    message: String
+) : PotatoCannonException(message)

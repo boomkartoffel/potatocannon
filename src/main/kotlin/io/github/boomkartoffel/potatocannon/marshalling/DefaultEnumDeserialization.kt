@@ -1,10 +1,9 @@
-package io.github.boomkartoffel.potatocannon.deserialization
+package io.github.boomkartoffel.potatocannon.marshalling
 
-import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
-import com.fasterxml.jackson.databind.introspect.NopAnnotationIntrospector
-import com.fasterxml.jackson.databind.Module
 import com.fasterxml.jackson.core.Version
-import com.fasterxml.jackson.databind.introspect.AnnotatedClass
+import com.fasterxml.jackson.databind.Module
+import com.fasterxml.jackson.databind.introspect.NopAnnotationIntrospector
+import io.github.boomkartoffel.potatocannon.strategy.UnknownEnumAsDefault
 
 /**
  * Marks a single enum constant as the default value to use during deserialization

@@ -53,7 +53,7 @@ class RetryLimit(val count: Int) : CannonSetting, PotatoSetting {
  * @throws RequestSendingFailureException if the function throws.
  */
 class RetryDelay (
-    private val fn: (attempt: Int, ctx: CannonContext) -> Long
+    private val fn: (attempt: Int, ctx: ContextView) -> Long
 ) : PotatoSetting, CannonSetting {
 
     /** Constant delay. */
@@ -66,7 +66,7 @@ class RetryDelay (
     constructor(policy: RetryDelayPolicy) : this({ attempt, _ -> policy.delayMillis(attempt) })
 
     /** Compute clamped delay (ms) for a given attempt and context. */
-    fun delayMillis(attempt: Int, ctx: CannonContext): Long {
+    fun delayMillis(attempt: Int, ctx: ContextView): Long {
         val raw = try { fn(attempt, ctx) } catch (ex: Exception) {
             throw RequestSendingFailureException("RetryDelay function threw for attempt $attempt", ex)
         }
@@ -83,7 +83,7 @@ class RetryDelay (
 
         @JvmStatic fun ofMillis(ms: Long) = RetryDelay(ms)
         @JvmStatic fun of(f: (Int) -> Long) = RetryDelay(f)
-        @JvmStatic fun of(f: (Int, CannonContext) -> Long) = RetryDelay(f)
+        @JvmStatic fun of(f: (Int, ContextView) -> Long) = RetryDelay(f)
         @JvmStatic fun of(policy: RetryDelayPolicy) = RetryDelay(policy)
     }
 }

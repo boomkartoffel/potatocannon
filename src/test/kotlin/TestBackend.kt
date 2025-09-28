@@ -1,14 +1,12 @@
 package io.github.boomkartoffel.potatocannon
 
-import io.ktor.http.ContentType
-import io.ktor.http.Cookie
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.withCharset
-import io.ktor.serialization.kotlinx.json.json
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
-import io.ktor.server.application.*
-import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.netty.channel.ChannelHandlerContext
@@ -16,8 +14,8 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import org.slf4j.bridge.SLF4JBridgeHandler
+import java.util.*
 import java.util.logging.LogManager
-import java.util.Collections
 import kotlin.coroutines.CoroutineContext
 
 
@@ -57,7 +55,8 @@ object TestBackend {
 
     fun start(port: Int) {
 
-        server = embeddedServer(Netty,
+        server = embeddedServer(
+            Netty,
             port = port,
             configure = {
                 // Allow many concurrent calls
@@ -291,6 +290,69 @@ object TestBackend {
                     call.respond(xml)
                 }
 
+                post("/xml-data-with-attributes") {
+                    val xml = """
+                        <?pc generated="true"?>
+                        <!-- A comment before the root -->
+                        <Users
+                            xmlns="urn:pc:users"
+                            xmlns:m="urn:pc:meta"
+                            xml:lang="en"
+                            m:version="1.2"
+                            id="U-集合">
+                          
+                          <User id="1" role="admin" active="true" m:tags="alpha,beta" created-at="2025-09-22T11:22:33Z">
+                            <name nick="Maxi">Max Muster</name>
+                            <email verified="yes">max@muster.com</email>
+                
+                            <aliases>
+                              <alias primary="true"/>
+                              <alias>Max M.</alias>
+                            </aliases>
+                
+                            <address type="home">
+                              <line1>Hauptstraße 1</line1>
+                              <city>München</city>
+                              <country code="DE">Deutschland</country>
+                            </address>
+                
+                            <!-- Mixed whitespace handling -->
+                            <bio xml:space="preserve">Line 1
+                Line 2    with   spaces</bio>
+                
+                            <!-- CDATA with angle brackets and ampersands -->
+                            <notes><![CDATA[
+                Some free-form text with <tags> & weird stuff like 1 < 2 and URLs http://example.com/?a=1&b=2
+                            ]]></notes>
+                
+                            <!-- Base64-ish blob -->
+                            <avatar media-type="image/png" encoding="base64">iVBORw0KGgoAAAANSUhEUgAAAAUA...</avatar>
+                
+                            <!-- Namespaced metadata -->
+                            <m:extra>
+                              <m:item key="🚀">rocket</m:item>
+                            </m:extra>
+                          </User>
+                
+                          <User id="2" role="user" active="false">
+                            <name>Jane Doe</name>
+                            <email>jane.doe@example.com</email>
+                
+                            <!-- Empty and self-closing forms -->
+                            <empty-element />
+                            <self-closing/>
+                
+                            <!-- Inline list -->
+                            <numbers><n>0</n><n>1</n><n>2</n></numbers>
+                
+                            <!-- Mixed content -->
+                            Mixed content before <inline-elem attr="v">X</inline-elem> after.
+                          </User>
+                        </Users>
+                    """.trimIndent()
+                    call.respond(xml)
+                }
+
                 post("/create-user-custom") {
                     val xml = """
                                 1,Max Muster,max@muster.com 
@@ -324,6 +386,16 @@ object TestBackend {
                     lastNumber = null
                 }
 
+                post("/t") {
+                    val ms = call.request.queryParameters["ms"]?.toLongOrNull() ?: 0L
+                    delay(ms)
+                    call.respondText("ok")
+                }
+
+                post("/mirror") {
+                    call.respondText(call.receiveText())
+                }
+
                 post("/timeout") {
 
                     val id = call.request.queryParameters["id"] ?: ""
@@ -350,12 +422,12 @@ object TestBackend {
             }
         }
 
-        server?.start(wait = false)
+        server.start(wait = false)
     }
 
 
     fun stop() {
-        server?.stop(
+        server.stop(
             gracePeriodMillis = 1000,
             timeoutMillis = 5000
         )

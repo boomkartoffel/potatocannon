@@ -89,7 +89,7 @@ class Cannon {
      * Sets the firing mode for this cannon.
      *
      * When set to [FireMode.SEQUENTIAL], potatoes are fired strictly one after another, allowing
-     * safe sharing of data via [CannonContext] across requests. With [FireMode.PARALLEL], multiple
+     * safe sharing of data via [PotatoCannonContext] across requests. With [FireMode.PARALLEL], multiple
      * potatoes may execute concurrently (subject to [ConcurrencyLimit]).
      *
      * This call adds/overrides a [FireMode] setting and returns a cannon with the updated settings
@@ -101,19 +101,62 @@ class Cannon {
     fun withFireMode(mode: FireMode): Cannon = addSettings(mode)
 
     /**
-     * Attaches a [CannonContext] to this cannon for sharing data across potatoes.
+     * Attaches a [PotatoCannonContext] to this cannon for sharing key–value data across potatoes.
      *
-     * Values stored in the context (e.g., via `CaptureToContext`) on earlier requests can be
-     * retrieved in later requests using [resolveFromContext].
+     * Values captured earlier (e.g., via `CaptureToContext`) can be retrieved in later requests
+     * using [resolveFromContext]. If multiple contexts are
+     * added, the most recently added one takes precedence, effectively resetting the previous context. Returns a cannon with the updated settings.
      *
-     * If multiple contexts are added, the most recently added one takes precedence when
-     * resolving settings. This call returns a cannon with the updated settings.
-     *
-     * @param context The [CannonContext] containing key–value pairs to be available during firing.
-     * @return A [Cannon] instance with the provided [CannonContext] applied.
+     * @param context The [PotatoCannonContext] to make available during firing.
+     * @return A [Cannon] instance with the provided [PotatoCannonContext] applied.
+     * @see resolveFromContext
+     * @see CaptureToContext
      * @since 0.1.0
      */
-    fun withContext(context: CannonContext): Cannon = addSettings(context)
+    fun withGlobalContext(context: PotatoCannonContext): Cannon = addSettings(UseGlobalContext(context))
+
+    /**
+     * Attaches an empty [PotatoCannonContext] to this cannon for sharing key–value data across potatoes.
+     *
+     * Subsequent requests can populate and read values via `CaptureToContext.global(...)` / [resolveFromContext].
+     * If multiple contexts are added, the most recently added one takes precedence. Returns a cannon
+     * with the updated settings.
+     *
+     * @return A [Cannon] instance with an empty [PotatoCannonContext] applied.
+     * @see resolveFromContext
+     * @see CaptureToContext
+     * @since 0.1.0
+     */
+    fun withGlobalContext(): Cannon = addSettings(UseGlobalContext())
+
+    /**
+     * Attaches a session-scoped [PotatoCannonContext] to this cannon.
+     *
+     * A *session context* is intended for data that should live only within a few firing sessions
+     * (e.g., auth tokens, correlation IDs). After setting this Context, **all following** `.fire(...)` calls will be able to access the store. Values can be captured
+     * and later resolved via `CaptureToContext.session(...)` / [resolveFromContext]. If multiple contexts are
+     * added, the most recently added one takes precedence, effectively resetting the previous context. Returns a cannon with the updated settings.
+     *
+     * @return A [Cannon] instance with an empty session [PotatoCannonContext] applied.
+     * @since 0.1.0
+     * @see resolveFromContext
+     * @see CaptureToContext
+     */
+    fun withSessionContext(): Cannon = addSettings(UseSessionContext())
+
+    /**
+     * Attaches the given session-scoped [PotatoCannonContext] to this cannon.
+     *
+     * Use this when you want to seed the session context with initial values. If multiple contexts are added, the most recently added
+     * one takes precedence. Returns a cannon with the updated settings.
+     *
+     * @param ctx The initial session [PotatoCannonContext].
+     * @return A [Cannon] instance with the provided session [PotatoCannonContext] applied.
+     * @see resolveFromContext
+     * @see CaptureToContext
+     * @since 0.1.0
+     */
+    fun withSessionContext(ctx: PotatoCannonContext): Cannon = addSettings(UseSessionContext(ctx))
 
     /**
      * Returns a new `Cannon` instance with additional [CannonSetting] strategies appended.
@@ -148,8 +191,9 @@ class Cannon {
      * @return A list of [Result] objects representing the responses.
      * @since 0.1.0
      */
-    fun fire(vararg potatoes: Potato): List<Result> {
-        return fire(potatoes.toList())
+    fun fire(vararg potatoes: Potato): Cannon {
+        fireWithResults(potatoes.toList())
+        return this
     }
 
     /**
@@ -161,8 +205,39 @@ class Cannon {
      * @return A list of [Result] objects representing the responses.
      * @since 0.1.0
      */
-    fun fire(potatoes: List<Potato>): List<Result> {
-        val ctx = settings.lastSettingWithDefault<CannonContext>(CannonContext())
+    fun fire(potatoes: List<Potato>): Cannon {
+        fireWithResults(potatoes)
+        return this
+    }
+
+    /**
+     * Fires the givens single or multiple [Potato].
+     *
+     * If no [FireMode] is specified, the default is [FireMode.PARALLEL].
+     *
+     * @param potatoes The HTTP requests to fire.
+     * @return A list of [Result] objects representing the responses.
+     * @since 0.1.0
+     */
+    fun fireWithResults(vararg potatoes: Potato): List<Result> {
+        return fireWithResults(potatoes.toList())
+    }
+
+    /**
+     * Fires a list of [Potato] requests according to the configured [FireMode].
+     *
+     * If no [FireMode] is specified, the default is [FireMode.PARALLEL] (except when pacing is used, in which case it switches to [FireMode.SEQUENTIAL]).
+     *
+     * @param potatoes The list of HTTP requests to fire.
+     * @return A list of [Result] objects representing the responses.
+     * @since 0.1.0
+     */
+    fun fireWithResults(potatoes: List<Potato>): List<Result> {
+        val useGlobal = settings.asSequence().filterIsInstance<UseGlobalContext>().lastOrNull()
+        val useSession = settings.lastSettingWithDefault<UseSessionContext>(UseSessionContext())
+
+        val ctx = CompositeContext(useSession.ctx, useGlobal?.ctx)
+
         val configuredMode = settings.lastSettingWithDefault<FireMode>(FireMode.PARALLEL)
         val pacing = settings.lastSettingWithDefault<Pacing>(Pacing(0))
         val mode = if (!pacing.isZeroPacing) FireMode.SEQUENTIAL else configuredMode
@@ -231,7 +306,7 @@ class Cannon {
 
     private fun runPotatoWithRetries(
         potato: Potato,
-        ctx: CannonContext,
+        ctx: CompositeContext,
         settings: List<PotatoCannonSetting>
     ): Result {
         var attempt = 0
@@ -259,14 +334,14 @@ class Cannon {
     }
 
 
-    private fun backoff(attempt: Int, ctx: CannonContext, backoffStrategy: RetryDelay): Long {
+    private fun backoff(attempt: Int, ctx: ContextView, backoffStrategy: RetryDelay): Long {
         return backoffStrategy.delayMillis(attempt, ctx)
     }
 
     private fun fireOne(
         potato: Potato,
         currentAttempt: Int,
-        context: CannonContext,
+        context: CompositeContext,
         allSettings: List<PotatoCannonSetting>
     ): Result {
 
@@ -331,8 +406,20 @@ class Cannon {
                     throw RequestPreparationException("Failed to resolve BodyFromContext", t)
                 }
             }
+
+            is TextPotatoBody -> body
+            is BinaryPotatoBody -> body
+            is BodyFromObject<*> -> {
+                val obj = body.obj
+                try {
+                    body.resolve()
+                } catch (t: Throwable) {
+                    throw RequestPreparationException("Failed to resolve BodyFromObject for object: $obj", t)
+                }
+
+            }
+
             null -> null
-            else -> body as ConcretePotatoBody
         }
 
         when (bodyToUse) {
@@ -398,6 +485,8 @@ class Cannon {
             val bodyBytes = resp.bodyBytes ?: ByteArray(0)
             val tDone = System.nanoTime()
 
+            val wireMs = (tDone - t0) / 1_000_000
+
             val respHeaders: Map<String, List<String>> =
                 resp.headers.groupBy({ it.name.lowercase() }, { it.value })
 
@@ -405,7 +494,7 @@ class Cannon {
                 statusCode = resp.code,
                 headers = respHeaders,
                 body = bodyBytes,
-                wireDurationMillis = (tDone - t0) / 1_000_000,
+                wireDurationMillis = wireMs,
                 httpVersion = ctx.protocolVersion.toNegotiatedProtocol()
             )
         } catch (t: Throwable) {
@@ -439,7 +528,7 @@ class Cannon {
         allSettings
             .filterIsInstance<CaptureToContext>()
             .forEach {
-                context[it.key] = it.fn(result, context)
+                context.set(it.key, it.target, it.fn(result, context))
             }
 
         val expectationResults = expectations
@@ -482,12 +571,12 @@ private fun ProtocolVersion?.toNegotiatedProtocol(): NegotiatedProtocol {
 private fun effectiveSettings(
     cannonSettings: List<CannonSetting>,
     potatoSettings: List<PotatoSetting>,
-    context: CannonContext
+    context: ContextView
 ): List<PotatoCannonSetting> {
     return (cannonSettings + potatoSettings)
         .map {
             when (it) {
-                is ResolveFromContext -> it.materialize(context)
+                is ResolveFromContext -> it.materialize(context) ?: NoOp
                 else -> it
             }
         }

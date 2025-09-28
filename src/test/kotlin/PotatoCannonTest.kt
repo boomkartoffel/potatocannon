@@ -1,19 +1,21 @@
 package io.github.boomkartoffel.potatocannon
 
+import io.github.boomkartoffel.potatocannon.annotation.*
 import io.github.boomkartoffel.potatocannon.cannon.Cannon
-import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
 import io.github.boomkartoffel.potatocannon.exception.RequestPreparationException
 import io.github.boomkartoffel.potatocannon.exception.RequestSendingFailureException
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
+import io.github.boomkartoffel.potatocannon.marshalling.Deserializer
+import io.github.boomkartoffel.potatocannon.marshalling.EnumDefaultValue
+import io.github.boomkartoffel.potatocannon.marshalling.WireFormat
 import io.github.boomkartoffel.potatocannon.potato.*
-import io.github.boomkartoffel.potatocannon.result.DeserializationFormat
-import io.github.boomkartoffel.potatocannon.result.Deserializer
 import io.github.boomkartoffel.potatocannon.result.Result
 import io.github.boomkartoffel.potatocannon.strategy.*
 import io.kotest.assertions.throwables.shouldNotThrow
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.longs.shouldBeGreaterThan
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
@@ -28,18 +30,26 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
+import org.w3c.dom.Document
+import org.xml.sax.InputSource
 import java.io.ByteArrayOutputStream
+import java.io.StringReader
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.*
 import java.util.stream.Stream
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.xpath.XPathFactory
 import kotlin.properties.Delegates
 import kotlin.random.Random
 import kotlin.system.measureNanoTime
 import kotlin.system.measureTimeMillis
 
+@XmlRoot(value = "User")
 data class CreateUser(
-    val id: Int, val name: String, val email: String
+    val id: Int,
+    val name: String,
+    val email: String
 )
 
 data class EmptyStringToNullCheckObject(
@@ -384,9 +394,9 @@ class PotatoCannonTest {
         val potatoes = Potato(
             method = HttpMethod.POST,
             path = "/test"
-        )*countPotatoes
+        ) * countPotatoes
 
-        val baseMs = (responseTime * countPotatoes) + (pacing * (countPotatoes- 1))
+        val baseMs = (responseTime * countPotatoes) + (pacing * (countPotatoes - 1))
 
         val miscOverheadMs = 10 * (countPotatoes)
 
@@ -412,25 +422,24 @@ class PotatoCannonTest {
     fun `Pacing can be customized with data from CannonContext and according to a custom function`() {
         val countPotatoes = 10
         val responseTime = 2
-        val pacing = listOf(0L,0,0,800,800,1000,1000,2000,2000)
+        val pacing = listOf(0L, 0, 0, 800, 800, 1000, 1000, 2000, 2000)
 
         val funkyPacing = Pacing {
-            val currentCall = it.get<Int>("call")
+            val currentCall = it.get<Int>("call") ?: 0
             pacing[currentCall]
         }
 
-        val increaseCallCounter = CaptureToContext("call") { _, ctx ->
-            val currentCall = ctx.get<Int>("call")
+        val increaseCallCounter = CaptureToContext.global("call") { _, ctx ->
+            val currentCall = ctx.get<Int>("call")?: 0
             currentCall + 1
         }
 
-        val ctx = CannonContext().apply { this["call"] = -1 }
+        val ctx = PotatoCannonContext().apply { this["call"] = -1 }
 
-        val potatoes = Potato(
-            method = HttpMethod.POST,
+        val potatoes = Potato.post(
             path = "/test",
             increaseCallCounter
-        )*countPotatoes
+        ) * countPotatoes
 
         val baseMs = (responseTime * countPotatoes) + pacing.sum()
 
@@ -444,7 +453,7 @@ class PotatoCannonTest {
 
         val elapsedMs = measureTimeMillis {
             baseCannon
-                .withContext(ctx)
+                .withGlobalContext(ctx)
                 .addSettings(funkyPacing)
                 .fire(potatoes)
         }
@@ -615,14 +624,14 @@ class PotatoCannonTest {
     @Test
     fun `POST request to create user returns serializable XML`() {
         val expectSingle = Check { result: Result ->
-            val created = result.bodyAsObject(CreateUser::class.java, DeserializationFormat.XML)
+            val created = result.bodyAsObject(CreateUser::class.java, WireFormat.XML)
             created.id shouldBe 1
             created.name shouldBe "Max Muster"
             created.email shouldBe "max@muster.com"
         }.withDescription("Response is correctly deserialized from single XML")
 
         val expectList = Check { result: Result ->
-            val createdList = result.bodyAsList(CreateUser::class.java, DeserializationFormat.XML)
+            val createdList = result.bodyAsList(CreateUser::class.java, WireFormat.XML)
 
             createdList.size shouldBe 1
 
@@ -641,6 +650,16 @@ class PotatoCannonTest {
 
 
         baseCannon.fire(potatoSingle, potatoList)
+
+    }
+
+    @Test
+    fun `XML with various attributes gets correctly printed to the log`() {
+        val potatoSingle = Potato(
+            method = HttpMethod.POST, path = "/xml-data-with-attributes"
+        )
+
+        baseCannon.fire(potatoSingle)
 
     }
 
@@ -833,7 +852,7 @@ class PotatoCannonTest {
         }
 
         val checkXml = Check { result: Result ->
-            val enum = result.bodyAsObject(EmptyEnumCheckObject::class.java, DeserializationFormat.XML)
+            val enum = result.bodyAsObject(EmptyEnumCheckObject::class.java, WireFormat.XML)
             enum.enum shouldBe EmptyEnumCheck.NONE
             enum.enum2 shouldBe EmptyEnumCheck.NONE
         }
@@ -887,7 +906,7 @@ class PotatoCannonTest {
     @Test
     fun `POST request to create user returns serializable XML and can be deserialized with a different charset`() {
         val expectSingle = Check { result: Result ->
-            val created = result.bodyAsObject(CreateUser::class.java, DeserializationFormat.XML, Charsets.UTF_32)
+            val created = result.bodyAsObject(CreateUser::class.java, WireFormat.XML, Charsets.UTF_32)
             created.id shouldBe 1
             created.name shouldBe "Max Muster"
             created.email shouldBe "max@muster.com"
@@ -903,7 +922,7 @@ class PotatoCannonTest {
     @Test
     fun `POST request to create user returns serializable XML and can be deserialized with a different charset automatically`() {
         val expectSingle = Check { result: Result ->
-            val created = result.bodyAsObject(CreateUser::class.java, DeserializationFormat.XML)
+            val created = result.bodyAsObject(CreateUser::class.java, WireFormat.XML)
             created.id shouldBe 1
             created.name shouldBe "Max Muster"
             created.email shouldBe "max@muster.com"
@@ -1402,10 +1421,10 @@ class PotatoCannonTest {
             method = HttpMethod.POST,
             path = "/first-call",
             expect200StatusCode,
-            CaptureToContext(keyForSecondCall) { r, _ ->
+            CaptureToContext.global(keyForSecondCall) { r, _ ->
                 r.responseText()
             },
-            CaptureToContext("attempts") { r, _ ->
+            CaptureToContext.global("attempts") { r, _ ->
                 r.attempts
             },
             resolveFromContext { ctx ->
@@ -1420,7 +1439,7 @@ class PotatoCannonTest {
             expect200StatusCode,
             expectOKResponseText,
             resolveFromContext { ctx ->
-                QueryParam("number", ctx.get<String>(keyForSecondCall))
+                QueryParam("number", ctx.get<String>(keyForSecondCall) ?: "")
             },
             resolveFromContext { ctx ->
                 LogCommentary("The previous request needed ${ctx.get<Int>("attempts")} attempts")
@@ -1434,11 +1453,53 @@ class PotatoCannonTest {
 
         baseCannon
             .withFireMode(FireMode.SEQUENTIAL)
-            .withContext(CannonContext().also { it["test"] = "test" })
+            .withGlobalContext(PotatoCannonContext().also { it["test"] = "test" })
             .fire(
                 firstPotato, secondPotato
             )
 
+    }
+
+    @Test
+    fun `The cannon can be configured with context from call before`() {
+
+        val authKey = "auth-key"
+
+        val setAuthHeader = resolveFromContext {
+            val token = it.get(authKey, String::class.java)
+            if (token != null) {
+                BearerAuth(token)
+            } else {
+                null
+            }
+        }
+
+        val authPotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            CaptureToContext.global(authKey) { result ->
+                result.responseText()
+            }
+        )
+
+        val authCannon = baseCannon
+            .withGlobalContext()
+            .addSettings(setAuthHeader)
+
+        authCannon.fire(authPotato)
+
+        val expectAuthHeader = Check {
+            it.requestHeaders["authorization"] shouldContain "Bearer Hello"
+        }.withDescription("Bearer auth is set in the auth cannon")
+
+        val validatePotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            expectAuthHeader
+        )
+
+        authCannon
+            .fire(validatePotato)
     }
 
     @Test
@@ -1455,7 +1516,7 @@ class PotatoCannonTest {
             method = HttpMethod.POST,
             path = "/test",
             expect200StatusCode,
-            CaptureToContext(ctxKey) { r ->
+            CaptureToContext.session(ctxKey) { r ->
                 r.responseText()
             }
         )
@@ -1465,58 +1526,29 @@ class PotatoCannonTest {
             path = "/test",
             BodyFromContext {
                 val content = it.get<String>(ctxKey)
-                TextPotatoBody("""
+                TextPotatoBody(
+                    """
                 {
                     "valueFromFirstCall": "$content"
                 }
-                """.trimIndent())
+                """.trimIndent()
+                )
             },
             expectHelloInRequest
         )
 
         baseCannon
-            .withFireMode(FireMode.SEQUENTIAL)
-            .fire(firstPotato, secondPotato)
+            .addSettings(UseSessionContext())
+            .fire(firstPotato)
+            .fire(secondPotato)
 
     }
 
-    @Test
-    fun `Resolving a key from context that is not present or of the wrong type will throw a RequestPreparationException`() {
-
-        val missingKey = Potato(
-            method = HttpMethod.POST,
-            path = "/test",
-            resolveFromContext { ctx ->
-                QueryParam("missing", ctx["missing"])
-            },
-        )
-
-        val context = CannonContext().apply { this["intKey"] = 1 }
-
-        val wrongCast = Potato(
-            method = HttpMethod.POST,
-            path = "/test",
-            resolveFromContext { ctx ->
-                val wrongType: String = ctx["intKey"]
-                QueryParam("wrongType", wrongType)
-            },
-        )
-
-        shouldThrow<RequestPreparationException> {
-            baseCannon.fire(missingKey)
-        }.message shouldBe "No value found in context for the key 'missing'"
-
-        shouldThrow<RequestPreparationException> {
-            baseCannon
-                .withContext(context)
-                .fire(wrongCast)
-        }.message shouldBe "Value for 'intKey' is of type java.lang.Integer, but expected is java.lang.String"
-    }
 
     @Test
     fun `A key can be retrieved from a Cannon context that is placed on the cannon level`() {
 
-        val context = CannonContext().apply { this["key"] = "valueFromContext" }
+        val context = PotatoCannonContext().apply { this["key"] = "valueFromContext" }
         val queryParamIsAvailable = Expectation("Query param from context is available") { result ->
             result.fullUrl shouldContain "available=valueFromContext"
         }
@@ -1525,18 +1557,574 @@ class PotatoCannonTest {
             method = HttpMethod.POST,
             path = "/test",
             resolveFromContext { ctx ->
-                QueryParam("available", ctx["key"])
+                QueryParam("available", ctx["key"] ?: "")
             },
             queryParamIsAvailable
         )
 
         shouldNotThrow<RequestPreparationException> {
             baseCannon
-                .withContext(context)
+                .withGlobalContext(context)
                 .fire(potato)
         }
 
     }
+
+    @Test
+    fun `An object can be serialized by the cannon`() {
+
+        @io.github.boomkartoffel.potatocannon.annotation.JsonRoot("TestRoot")
+        data class Test1(val x: String = "1")
+
+        //No JsonRoot annotation
+        data class Test2(val x: String = "2")
+
+        val testRootIsProvided = Check {
+            it.requestBody?.getContentAsString() shouldContain "TestRoot"
+        }.withDescription("TestRoot is provided in Serialization")
+
+        val testRootMissing = Check {
+            it.requestBody?.getContentAsString() shouldNotContain "TestRoot"
+        }.withDescription("TestRoot is NOT provided in Serialization")
+
+        val test1 = Test1()
+        val test2 = Test2()
+
+
+        val user = CreateUser(
+            id = 1,
+            name = "Max Muster",
+            email = "m@muster.com"
+        )
+        val user2 = CreateUser(
+            id = 2,
+            name = "John Doe",
+            email = "j@doe.com"
+        )
+
+        val printReqBody = Check {
+            println(it.requestBody?.getContentAsString())
+        }
+
+        val otherData = NullCheckObject(
+            map = mapOf("key1" to "value1", "key2" to "value2"),
+            list = listOf("item1", "item2", "item3"),
+        )
+
+        val users = listOf(user, user2)
+        val mixed = listOf(user, user2, otherData)
+
+        val jsonPotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test",
+            BodyFromObject.json(user),
+        )
+        val xmlPotato = jsonPotato.withBody(BodyFromObject.xml(user))
+
+        val usersPotatoJson = jsonPotato.withBody(BodyFromObject.json(users))
+        val usersPotatoXml = jsonPotato.withBody(BodyFromObject.xml(users))
+
+        val mixedDataJson = jsonPotato.withBody(BodyFromObject.json(mixed))
+        val mixedDataXml = jsonPotato.withBody(BodyFromObject.xml(mixed))
+
+        val test1Potato = jsonPotato.withBody(BodyFromObject.json(test1)).addSettings(testRootIsProvided)
+        val test2Potato = jsonPotato.withBody(BodyFromObject.json(test2)).addSettings(testRootMissing)
+
+        baseCannon
+            .withFireMode(FireMode.SEQUENTIAL)
+            .addSettings(printReqBody)
+            .fire(
+                jsonPotato,
+                xmlPotato,
+                usersPotatoJson,
+                usersPotatoXml,
+                mixedDataJson,
+                mixedDataXml,
+                test1Potato,
+                test2Potato
+            )
+
+
+    }
+
+    @Test
+    fun `JSON annotations are correctly used on serialization`() {
+        // ── Models under test ───────────────────────────────────────────────────────
+        @JsonRoot("TestRoot")
+        data class Test1(val x: String = "1")
+
+        // No JsonRoot → must serialize without wrapper
+        data class Test2(val x: String = "2")
+
+        // Rename a property for (de)serialization
+        data class Renamed(
+            @JsonName("userId") val id: Int = 7,
+            val name: String = "Max"
+        )
+
+        data class OmitField(
+            val x: String,
+            val y: String,
+            @JsonOmitNull val z: String? = null
+        )
+
+        data class Ignore(
+            val x: String = "1",
+            @JsonIgnore
+            val y: String = "2",
+        )
+
+        class IgnoreClass(
+            val x: String = "1",
+            @JsonIgnore
+            val y: String = "2",
+        )
+
+        // class-level
+        @JsonOmitNull
+        data class OmitNullOnClass(
+            val x: String? = null,
+            val y: String? = null
+        )
+
+        // Control JSON property order
+        @JsonPropertyOrder("b", "a")
+        data class Ordered(val a: Int = 1, val b: Int = 2)
+
+
+        // ── Expectations ────────────────────────────────────────────
+        // Root wrapping appears only when @JsonRoot present
+        val testRootProvided = Check {
+            it.requestBody?.getContentAsString()!!.shouldContain("TestRoot")
+        }.withDescription("TestRoot is provided in Serialization")
+
+        val testRootMissing = Check {
+            it.requestBody?.getContentAsString()!!.shouldNotContain("TestRoot")
+        }.withDescription("TestRoot is NOT provided in Serialization")
+
+        // JsonName renames "id" -> "userId"
+        val renamedHasUserId = Check {
+            val s = it.requestBody?.getContentAsString()!!
+            s.shouldContain("userId")
+            s.shouldNotContain("id")
+        }.withDescription("@JsonName renames id -> userId")
+
+        val omitNullTestObject = OmitField(
+            x = "x",
+            y = "y",
+            z = null
+        )
+
+        val omitNullTest1 = Check {
+            val body = it.requestBody?.getContentAsString().orEmpty()
+            body.shouldContain(""""x":"x"""")
+            body.shouldContain(""""y":"y"""")
+            body.shouldNotContain(""""z"""")
+            body.shouldNotContain(":null")
+        }.withDescription("@JsonOmitNull omits null field when put on property level")
+
+        val omitInClassObject = OmitNullOnClass(
+            x = "x"
+        )
+
+        val omitNullTest2 = Check {
+            val body = it.requestBody?.getContentAsString().orEmpty()
+            body.shouldContain(""""x":"x"""")
+            body.shouldNotContain(""""y"""")
+            body.shouldNotContain(":null")
+        }.withDescription("@JsonOmitNull omits null field when put on class level")
+
+
+        // JsonPropertyOrder enforces "b" before "a"
+        val orderedKeys = Check {
+            val s = it.requestBody?.getContentAsString()!!
+            val bIdx = s.indexOf("b")
+            val aIdx = s.indexOf("a")
+            require(bIdx >= 0 && aIdx >= 0) { "Missing keys in JSON: $s" }
+            require(bIdx < aIdx) { "Expected 'b' before 'a' in: $s" }
+        }.withDescription("@JsonPropertyOrder puts b before a")
+
+
+        val jsonIgnore = Check {
+            val s = it.requestBody?.getContentAsString()!!
+            s.shouldContain(""""x"""")
+            s.shouldNotContain(""""y"""")
+        }.withDescription("@JsonIgnore omits the field from serialization")
+
+        // ── Potatoes ───────────────────────────────────────────────────────────────
+        val basePotato = Potato(
+            method = HttpMethod.POST,
+            path = "/test"
+        )
+
+        val p1 = basePotato
+            .withBody(BodyFromObject.json(Test1()))
+            .addSettings(testRootProvided)
+
+        val p2 = basePotato
+            .withBody(BodyFromObject.json(Test2()))
+            .addSettings(testRootMissing)
+
+        val p3 = basePotato
+            .withBody(BodyFromObject.json(Renamed()))
+            .addSettings(renamedHasUserId)
+
+        val p4 = basePotato
+            .withBody(BodyFromObject.json(omitNullTestObject))
+            .addSettings(omitNullTest1)
+
+        val p5 = basePotato
+            .withBody(BodyFromObject.json(omitInClassObject))
+            .addSettings(omitNullTest2)
+
+        val p6 = basePotato
+            .withBody(BodyFromObject.json(Ordered()))
+            .addSettings(orderedKeys)
+
+        val p7 = basePotato
+            .withBody(BodyFromObject.json(Ignore()))
+            .addSettings(jsonIgnore)
+
+        val p7b = basePotato
+            .withBody(BodyFromObject.json(IgnoreClass()))
+            .addSettings(jsonIgnore)
+
+        baseCannon
+            .withFireMode(FireMode.SEQUENTIAL)
+            .fire(p1, p2, p3, p4, p5, p6, p7, p7b)
+//            .fire(p7)
+    }
+
+    @Test
+    fun `JSON annotations are correctly used on deserialization`() {
+
+        val potato = Potato(
+            method = HttpMethod.POST,
+            path = "/mirror"
+        )
+
+        data class Ignored(
+            val x: String,
+            @JsonIgnore
+            val y: String?,
+        )
+
+        val bodySentIgnored = """
+            {
+                "x": "value1",
+                "y": "value2"
+            }
+        """.trimIndent()
+
+        val expectIgnoreWorks = Check { result: Result ->
+            val obj = result.bodyAsObject(Ignored::class.java)
+            obj.x shouldBe "value1"
+            obj.y shouldBe null
+        }.withDescription("@JsonIgnore works on deserialization")
+
+        data class JsonNameTest(
+            @JsonName("a")
+            val x: Int
+        )
+
+        val bodySentJsonName = """{"a":7}"""
+
+        val expectJsonName = Check { result: Result ->
+            val obj = result.bodyAsObject(JsonNameTest::class.java)
+            assertEquals(7, obj.x)
+        }.withDescription("@JsonName maps external name")
+
+        data class AliasesTest(
+            @JsonAliases("uid", "xid")
+            val id: Int
+        )
+
+        val bodiesAliases = listOf(
+            """{"uid":1}""",
+            """{"xid":1}""",
+            """{"id":1}"""
+        )
+
+        val expectJsonAlias = Check { result: Result ->
+            val obj = result.bodyAsObject(AliasesTest::class.java)
+            obj.id shouldBe 1
+        }.withDescription("@JsonAliases maps alternative names")
+
+        @JsonRoot("TestRoot")
+        data class RootTest(val x: String)
+
+        val bodySentRoot = """{"TestRoot":{"x":"abc"}}"""
+
+        val expectRootTest = Check { result: Result ->
+            val obj = result.bodyAsObject(RootTest::class.java)
+            obj.x shouldBe "abc"
+        }.withDescription("@JsonRoot deserialization unwrap")
+
+        val bodySentRootList = """
+        [
+          {"TestRoot":{"x":"a"}},
+          {"TestRoot":{"x":"b"}},
+          {"TestRoot":{"x":"c"}}
+        ]
+    """.trimIndent()
+
+        val expectRootList = Check { result: Result ->
+            val items = result.bodyAsList(RootTest::class.java)
+            items.size shouldBe 3
+            items.map { it.x } shouldBe listOf("a", "b", "c")
+        }.withDescription("@JsonRoot deserialization unwrap for list elements")
+
+        baseCannon
+            .fire(
+                potato.withBody(TextPotatoBody(bodySentIgnored)).addSettings(expectIgnoreWorks),
+                potato.withBody(TextPotatoBody(bodySentJsonName)).addSettings(expectJsonName),
+                *bodiesAliases.map {
+                    potato.withBody(TextPotatoBody(it)).addSettings(expectJsonAlias)
+                }.toTypedArray(),
+                potato.withBody(TextPotatoBody(bodySentRoot)).addSettings(expectRootTest),
+                potato.withBody(TextPotatoBody(bodySentRootList)).addSettings(expectRootList)
+            )
+
+    }
+
+    @Test
+    fun `XML annotations are correctly used on deserialization`() {
+        val potato = Potato(method = HttpMethod.POST, path = "/mirror")
+
+        @XmlRoot("TestRoot")
+        data class RootTest(
+            val x: String
+        )
+
+        val xmlRoot = """
+                <TestRoot>
+                  <x>abc</x>
+                </TestRoot>
+            """.trimIndent()
+
+        val expectRoot = Check { result: Result ->
+            val obj = result.bodyAsObject(RootTest::class.java, WireFormat.XML)
+            obj.x shouldBe "abc"
+        }.withDescription("@XmlRoot + @XmlElement basic object")
+
+        data class User(
+            @XmlElement("userId") val id: Int,
+            val name: String
+        )
+
+        val xmlUser = """
+                <User>
+                  <userId>7</userId>
+                  <name>Max</name>
+                </User>
+            """.trimIndent()
+
+        val expectUser = Check { result: Result ->
+            val u = result.bodyAsObject(User::class.java, WireFormat.XML)
+            u.id shouldBe 7
+            u.name shouldBe "Max"
+        }.withDescription("@XmlElement renames field on read")
+
+        data class Node(
+            @XmlAttribute("id") val id: String,
+            val value: String
+        )
+
+        val xmlNode = """<Node id="N1"><value>foo</value></Node>""".trimIndent()
+
+        val expectNode = Check { result: Result ->
+            val n = result.bodyAsObject(Node::class.java, WireFormat.XML)
+            n.id shouldBe "N1"
+            n.value shouldBe "foo"
+        }.withDescription("@XmlAttribute maps attribute on read")
+
+        val xmlBagWrapped = """
+                <Bag>
+                  <bagItems>
+                    <item><x>a</x></item>
+                    <item><x>b</x></item>
+                    <item><x>c</x></item>
+                  </bagItems>
+                </Bag>
+            """.trimIndent()
+
+        val expectBagWrapped = Check { result: Result ->
+            val bag = result.bodyAsObject(XmlModels.BagWrapped::class.java, WireFormat.XML)
+            bag.items.map { it.x } shouldBe listOf("a", "b", "c")
+        }.withDescription("@XmlElementWrapper(useWrapping=true) reads wrapped list")
+
+        val xmlBagUnwrapped = """
+                <Bag>
+                  <item><x>a</x></item>
+                  <item><x>b</x></item>
+                  <item><x>c</x></item>
+                </Bag>
+            """.trimIndent()
+
+
+//        <item><x>a</x></item>
+//        <item><x>b</x></item>
+//        <item><x>c</x></item>
+
+        val expectBagUnwrapped = Check { result: Result ->
+            val bag = result.bodyAsObject(XmlModels.BagUnwrapped::class.java, WireFormat.XML)
+            bag.items.map { it.x } shouldBe listOf("a", "b", "c")
+        }.withDescription("@XmlElementWrapper(useWrapping=false) reads flat list")
+
+        val xmlRootList = """
+                <RootTests>
+                  <TestRoot><x>a</x></TestRoot>
+                  <TestRoot><x>b</x></TestRoot>
+                  <TestRoot><x>c</x></TestRoot>
+                </RootTests>
+            """.trimIndent()
+
+        val expectRootList = Check { result: Result ->
+            val items = result.bodyAsList(RootTest::class.java, WireFormat.XML)
+            items.map { it.x } shouldBe listOf("a", "b", "c")
+        }.withDescription("Top-level list of @XmlRoot elements")
+
+        baseCannon
+            .fire(
+                potato.withBody(TextPotatoBody(xmlRoot)).addSettings(expectRoot),
+                potato.withBody(TextPotatoBody(xmlUser)).addSettings(expectUser),
+                potato.withBody(TextPotatoBody(xmlNode)).addSettings(expectNode),
+                potato.withBody(TextPotatoBody(xmlBagWrapped)).addSettings(expectBagWrapped),
+//                potato.withBody(TextPotatoBody(xmlBagUnwrapped)).addSettings(expectBagUnwrapped),
+                potato.withBody(TextPotatoBody(xmlRootList)).addSettings(expectRootList)
+            )
+    }
+
+
+    private object XmlModels {
+        @XmlRoot("User")
+        data class UserWithRoot(
+            @XmlElement("UserId") val id: Int = 7,
+            val name: String = "Max"
+        )
+
+        // No @XmlRoot -> should NOT be <User>
+        data class UserNoRoot(val x: String = "1")
+
+        // Attribute instead of element
+        @XmlRoot("AttrUser")
+        data class UserWithAttr(
+            @XmlAttribute("id") val id: Int = 1,
+            val name: String = "Max"
+        )
+
+        data class SimpleUser(val name: String)
+
+        // Wrapper list
+        @XmlRoot("Group")
+        data class GroupWrapped(
+            @XmlWrapperElement("Users")
+            @XmlElement("User")
+            val users: List<SimpleUser> = listOf(SimpleUser("A"), SimpleUser("B"))
+        )
+
+        // No wrapper list
+        @XmlRoot("GroupFlat")
+        data class GroupUnwrapped(
+            @XmlUnwrap
+            @XmlElement("User")
+            val users: List<SimpleUser> = listOf(SimpleUser("A"), SimpleUser("B"))
+        )
+
+
+        // Text content (mixed attr + text)
+        @XmlRoot("Note")
+        data class Note(
+            @XmlAttribute("lang") val lang: String = "en",
+            @XmlText val text: String = "hello"
+        )
+
+        @XmlRoot("item")
+        data class Item(@XmlElement("x") val x: String)
+
+        @XmlRoot("Bag")
+        data class BagWrapped(
+            @XmlElement("bagItems")
+            val items: List<Item>
+        )
+
+        @XmlRoot("Bag")
+        data class BagUnwrapped(
+            @XmlElementWrapper(useWrapping = false)
+            val items: List<Item>
+        )
+    }
+
+    @Test
+    fun `XML annotations are correctly used`() {
+        // ---------- Helpers ----------
+        fun parseXml(s: String) = DocumentBuilderFactory.newInstance()
+            .apply { isNamespaceAware = false }
+            .newDocumentBuilder()
+            .parse(InputSource(StringReader(s)))
+
+        val xp = XPathFactory.newInstance().newXPath()
+        fun rootName(doc: Document) = xp.evaluate("local-name(/*)", doc)
+        fun count(doc: Document, expr: String) =
+            xp.evaluate("count($expr)", doc).toDouble().toInt()
+
+        fun text(doc: Document, expr: String) =
+            xp.evaluate(expr, doc)
+
+        // ---------- Expectations ----------
+        val expectRootProvided = Check {
+            val d = parseXml(it.requestBody?.getContentAsString().orEmpty())
+            require(rootName(d) == "User") { "root should be <User>, was <${rootName(d)}>" }
+            require(count(d, "/User/UserId") == 1) { "expected <UserId> element" }
+        }.withDescription("@XmlRoot + @XmlElement rename work")
+
+        val expectRootNotProvided = Check {
+            val d = parseXml(it.requestBody?.getContentAsString().orEmpty())
+            require(rootName(d) != "User") { "should not be <User> when @XmlRoot missing" }
+        }.withDescription("No @XmlRoot does not produce <User>")
+
+        val expectAttribute = Check {
+            val d = parseXml(it.requestBody?.getContentAsString().orEmpty())
+            require(rootName(d) == "AttrUser")
+            require(text(d, "/AttrUser/@id") == "1") { "id attribute missing" }
+            require(count(d, "/AttrUser/id") == 0) { "id must be attribute, not element" }
+        }.withDescription("@XmlAttribute produces attribute, not element")
+
+        val expectWrappedList = Check {
+            val d = parseXml(it.requestBody?.getContentAsString().orEmpty())
+            count(d, "/Group/Users/User") shouldBe 2
+        }.withDescription("@XmlElementWrapper(name=Users) wraps list")
+
+        val expectUnwrappedList = Check {
+            val d = parseXml(it.requestBody?.getContentAsString().orEmpty())
+            require(count(d, "/GroupFlat/Users") == 0) { "should not have <Users> wrapper" }
+            require(count(d, "/GroupFlat/User") == 2) { "expected 2 unwrapped <User> items" }
+        }.withDescription("@XmlElementWrapper(useWrapping=false) unwraps list")
+
+        val expectTextContent = Check {
+            val body = it.requestBody?.getContentAsString().orEmpty()
+            val d = parseXml(body)
+            require(text(d, "/Note/@lang") == "en")
+            require(text(d, "normalize-space(/Note)") == "hello") { "text content missing" }
+            body shouldNotContain "<text>"
+            body shouldNotContain "</text>"
+        }.withDescription("@XmlText puts value as element text")
+
+        // ---------- Potatoes ----------
+        val basePotato = Potato(method = HttpMethod.POST, path = "/test")
+
+        val p1 = basePotato.withBody(BodyFromObject.xml(XmlModels.UserWithRoot())).addSettings(expectRootProvided)
+        val p2 = basePotato.withBody(BodyFromObject.xml(XmlModels.UserNoRoot())).addSettings(expectRootNotProvided)
+        val p3 = basePotato.withBody(BodyFromObject.xml(XmlModels.UserWithAttr())).addSettings(expectAttribute)
+        val p4 = basePotato.withBody(BodyFromObject.xml(XmlModels.GroupWrapped())).addSettings(expectWrappedList)
+        val p5 = basePotato.withBody(BodyFromObject.xml(XmlModels.GroupUnwrapped())).addSettings(expectUnwrappedList)
+        val p6 = basePotato.withBody(BodyFromObject.xml(XmlModels.Note())).addSettings(expectTextContent)
+
+        // ---------- Fire ----------
+        baseCannon.withFireMode(FireMode.SEQUENTIAL).fire(p1, p2, p3, p4, p5, p6)
+//        baseCannon.withFireMode(FireMode.SEQUENTIAL).fire( p3)
+    }
+
 
     @Test
     fun `Binary Body can be sent`() {

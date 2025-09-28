@@ -1,7 +1,10 @@
 package io.github.boomkartoffel.potatocannon.potato
 
 import io.github.boomkartoffel.potatocannon.exception.RequestPreparationException
-import io.github.boomkartoffel.potatocannon.strategy.CannonContext
+import io.github.boomkartoffel.potatocannon.marshalling.Serializer
+import io.github.boomkartoffel.potatocannon.marshalling.WireFormat
+import io.github.boomkartoffel.potatocannon.strategy.ContextView
+import io.github.boomkartoffel.potatocannon.strategy.PotatoCannonContext
 import java.nio.charset.Charset
 import kotlin.text.Charsets.UTF_8
 
@@ -112,7 +115,7 @@ class TextPotatoBody @JvmOverloads constructor(
 class BinaryPotatoBody(val content: ByteArray) : ConcretePotatoBody
 
 /**
- * Builds the request body **at send time** from the current [CannonContext].
+ * Builds the request body **at send time** from the current [PotatoCannonContext].
  *
  * Use this when the payload depends on values captured from previous requests
  * (e.g., IDs, tokens). The function must return a **concrete** body:
@@ -120,7 +123,7 @@ class BinaryPotatoBody(val content: ByteArray) : ConcretePotatoBody
  *
  * ### Resolution timing
  * - Evaluated during request preparation (just before sending), using the latest
- *   state of the shared [CannonContext].
+ *   state of the shared [PotatoCannonContext].
  * - Not evaluated for TRACE requests (bodies are forbidden for TRACE).
  *
  * ### Examples
@@ -139,4 +142,24 @@ class BinaryPotatoBody(val content: ByteArray) : ConcretePotatoBody
  *
  * @throws RequestPreparationException if the function throws.
  */
-class BodyFromContext(val content: (CannonContext) -> ConcretePotatoBody) : PotatoBody
+class BodyFromContext(val content: (ContextView) -> ConcretePotatoBody) : PotatoBody
+
+
+class BodyFromObject<T: Any>(val obj: T, val serializer: (T) -> ConcretePotatoBody) : PotatoBody {
+
+    internal fun resolve(): ConcretePotatoBody = serializer(obj)
+
+    companion object {
+        private fun <T: Any> from(obj: T, target: WireFormat): BodyFromObject<T> =
+            when (target) {
+                WireFormat.JSON -> BodyFromObject(obj) { o -> TextPotatoBody(Serializer.jsonWrite(o)) }
+                WireFormat.XML -> BodyFromObject(obj) { o -> TextPotatoBody(Serializer.xmlMapper.writeValueAsString(o)) }
+            }
+
+        @JvmStatic
+        fun <T: Any> json(obj: T): BodyFromObject<T> = from(obj, WireFormat.JSON)
+        @JvmStatic
+        fun <T: Any> xml(obj: T): BodyFromObject<T> = from(obj, WireFormat.XML)
+    }
+
+}

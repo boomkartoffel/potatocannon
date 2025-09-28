@@ -143,4 +143,97 @@ class Potato(
     fun addSettings(addedSettings: List<PotatoSetting>): Potato =
         this.withSettings(settings + addedSettings)
 
+    companion object {
+        private fun build(
+            method: HttpMethod,
+            path: String,
+            body: PotatoBody?,
+            settings: List<PotatoSetting>
+        ) = Potato(method, path, body, settings)
+
+        // ---- POST ----
+        @JvmStatic
+        fun post(path: String, vararg settings: PotatoSetting) =
+            build(HttpMethod.POST, path, null, settings.toList())
+
+        @JvmStatic
+        fun post(path: String, settings: List<PotatoSetting>) =
+            build(HttpMethod.POST, path, null, settings)
+
+        @JvmStatic
+        fun post(path: String, body: PotatoBody, vararg settings: PotatoSetting) =
+            build(HttpMethod.POST, path, body, settings.toList())
+
+        @JvmStatic
+        fun post(path: String, body: PotatoBody, settings: List<PotatoSetting>) =
+            build(HttpMethod.POST, path, body, settings)
+
+        // ---- GET ----
+        @JvmStatic
+        fun get(path: String, vararg settings: PotatoSetting) =
+            build(HttpMethod.GET, path, null, settings.toList())
+
+        @JvmStatic
+        fun get(path: String, settings: List<PotatoSetting>) =
+            build(HttpMethod.GET, path, null, settings)
+
+        @JvmStatic
+        fun get(path: String, body: PotatoBody, vararg settings: PotatoSetting) =
+            build(HttpMethod.GET, path, body, settings.toList())
+
+        @JvmStatic
+        fun get(path: String, body: PotatoBody, settings: List<PotatoSetting>) =
+            build(HttpMethod.GET, path, body, settings)
+
+        // ---- PUT ----
+        @JvmStatic
+        fun put(path: String, vararg settings: PotatoSetting) =
+            build(HttpMethod.PUT, path, null, settings.toList())
+
+        @JvmStatic
+        fun put(path: String, settings: List<PotatoSetting>) =
+            build(HttpMethod.PUT, path, null, settings)
+
+        @JvmStatic
+        fun put(path: String, body: PotatoBody, vararg settings: PotatoSetting) =
+            build(HttpMethod.PUT, path, body, settings.toList())
+
+        @JvmStatic
+        fun put(path: String, body: PotatoBody, settings: List<PotatoSetting>) =
+            build(HttpMethod.PUT, path, body, settings)
+
+        // ---- PATCH ----
+        @JvmStatic
+        fun patch(path: String, vararg settings: PotatoSetting) =
+            build(HttpMethod.PATCH, path, null, settings.toList())
+
+        @JvmStatic
+        fun patch(path: String, settings: List<PotatoSetting>) =
+            build(HttpMethod.PATCH, path, null, settings)
+
+        @JvmStatic
+        fun patch(path: String, body: PotatoBody, vararg settings: PotatoSetting) =
+            build(HttpMethod.PATCH, path, body, settings.toList())
+
+        @JvmStatic
+        fun patch(path: String, body: PotatoBody, settings: List<PotatoSetting>) =
+            build(HttpMethod.PATCH, path, body, settings)
+
+        // ---- DELETE ----
+        @JvmStatic
+        fun delete(path: String, vararg settings: PotatoSetting) =
+            build(HttpMethod.DELETE, path, null, settings.toList())
+
+        @JvmStatic
+        fun delete(path: String, settings: List<PotatoSetting>) =
+            build(HttpMethod.DELETE, path, null, settings)
+
+        @JvmStatic
+        fun delete(path: String, body: PotatoBody, vararg settings: PotatoSetting) =
+            build(HttpMethod.DELETE, path, body, settings.toList())
+
+        @JvmStatic
+        fun delete(path: String, body: PotatoBody, settings: List<PotatoSetting>) =
+            build(HttpMethod.DELETE, path, body, settings)
+    }
 }

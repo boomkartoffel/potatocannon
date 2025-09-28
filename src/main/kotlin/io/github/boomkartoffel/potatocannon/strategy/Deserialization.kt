@@ -1,5 +1,9 @@
 package io.github.boomkartoffel.potatocannon.strategy
-import io.github.boomkartoffel.potatocannon.deserialization.EnumDefaultValue
+import io.github.boomkartoffel.potatocannon.marshalling.EnumDefaultValue
+import io.github.boomkartoffel.potatocannon.strategy.NullCoercion.RELAX
+import io.github.boomkartoffel.potatocannon.strategy.NullCoercion.STRICT
+import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode.FAIL
+import io.github.boomkartoffel.potatocannon.strategy.UnknownPropertyMode.IGNORE
 
 
 /**
