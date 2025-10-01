@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented here.
 
-## [0.1.0-alpha2] - 2025-09-11
+## [0.1.0-alpha2] - 2025-10-01
 ### Changed
 - Compiler settings updated for backwards compatibility with **Java 11**
 - Refactored naming conventions for clarity

@@ -50,7 +50,7 @@ Add Potato Cannon as a **test dependency** in your project.
 <dependency>
   <groupId>io.github.boomkartoffel</groupId>
   <artifactId>potato-cannon</artifactId>
-  <version>0.1.0-alpha</version>
+  <version>0.1.0-alpha2</version>
   <scope>test</scope>
 </dependency>
 ```
@@ -58,8 +58,41 @@ Add Potato Cannon as a **test dependency** in your project.
 ### Gradle
 
 ```gradle
-testImplementation("io.github.boomkartoffel:potato-cannon:0.1.0-alpha")
+testImplementation("io.github.boomkartoffel:potato-cannon:0.1.0-alpha2")
 ```
+
+### Use a locally published build
+
+If you’re working on Potato Cannon locally (or testing changes before a release), publish it to your local Maven repo and point your consumer project at it.
+
+1. From the Potato Cannon project root, publish locally:
+
+```gradle
+./gradlew publishToMavenLocal
+```
+
+2. In your consumer project:
+
+### Add the local Maven repo to your repositories:
+#### Gradle
+Add `mavenLocal()` **before** other repositories so Gradle prefers your local artifact.
+
+```gradle
+repositories {
+  mavenLocal()
+  mavenCentral() // or your other repos
+}
+
+dependencies {
+  testImplementation("io.github.boomkartoffel:potato-cannon:0.1.0-alpha2")
+  // or whatever version you just published locally
+}
+```
+
+#### Maven
+Maven already checks your local repository at *~/.m2/repository* by default.
+Just make sure your dependency version matches the one you published with publishToMavenLocal:
+
 
 ## How to use
 

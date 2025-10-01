@@ -4,6 +4,15 @@ import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.strategy.*
 
 
+/**
+ * Marker interface for anything the cannon can execute ([Cannon.fire]).
+ * This includes both concrete [Potato] instances as well as [PotatoFromContext] which can construct a concrete [Potato] before firing based on the existing (global/session) [PotatoCannonContext].
+ *
+ * @see Potato
+ * @see PotatoFromContext
+ *
+ * @since 0.1.0
+ */
 sealed interface FireablePotato
 
 /**
@@ -14,15 +23,6 @@ sealed interface FireablePotato
  *
  * This class is immutable; use `with*` builders or factory helpers to derive new instances.
  *
- * ## Subclassing
- * This type is `open` for internal reasons, but **external subclassing is not supported**.
- * The firing pipeline is designed to handle only the base [Potato] instances and the deferred
- * variant provided by [PotatoFromContext]; other user-defined subclasses may be **ignored** or
- * behave unpredictably. Future versions may further restrict inheritance (e.g., by sealing the
- * hierarchy or making constructors internal).
- *
- * Prefer composition via [PotatoSetting] and deferred construction via
- * [PotatoFromContext.single] / [PotatoFromContext.many] instead of inheritance.
  *
  * @property method The HTTP method to use (e.g., GET, POST, PUT, DELETE).
  * @property path The relative path of the request (e.g., "/users").
@@ -39,7 +39,7 @@ class Potato(
     val path: String,
     val body: PotatoBody?,
     val settings: List<PotatoSetting>,
-): FireablePotato {
+) : FireablePotato {
     constructor(
         method: HttpMethod,
         path: String,
