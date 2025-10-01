@@ -4,26 +4,42 @@ import io.github.boomkartoffel.potatocannon.cannon.Cannon
 import io.github.boomkartoffel.potatocannon.strategy.*
 
 
+sealed interface FireablePotato
+
 /**
  * Represents an HTTP request definition to be fired by the [Cannon].
  *
  * A `Potato` encapsulates everything needed to define an HTTP call, including method, path,
  * optional body, and optional settings such as headers, query parameters, and expectations.
  *
- * This class is immutable; use `with*` methods to modify and derive new instances.
+ * This class is immutable; use `with*` builders or factory helpers to derive new instances.
  *
- * @property method The HTTP method to use (e.g. GET, POST, PUT, DELETE).
- * @property path The relative path of the request (e.g. "/users").
+ * ## Subclassing
+ * This type is `open` for internal reasons, but **external subclassing is not supported**.
+ * The firing pipeline is designed to handle only the base [Potato] instances and the deferred
+ * variant provided by [PotatoFromContext]; other user-defined subclasses may be **ignored** or
+ * behave unpredictably. Future versions may further restrict inheritance (e.g., by sealing the
+ * hierarchy or making constructors internal).
+ *
+ * Prefer composition via [PotatoSetting] and deferred construction via
+ * [PotatoFromContext.single] / [PotatoFromContext.many] instead of inheritance.
+ *
+ * @property method The HTTP method to use (e.g., GET, POST, PUT, DELETE).
+ * @property path The relative path of the request (e.g., "/users").
  * @property body Optional request body, either textual or binary.
- * @property settings Optional list of [PotatoSetting] items like [HeaderStrategy], [QueryParam], [LogCommentary] or [Expectation] of the request.
+ * @property settings Optional list of [PotatoSetting] items like [HeaderStrategy], [QueryParam],
+ *   [LogCommentary], or [Expectation] for the request.
+ * @see PotatoFromContext
+ * @see PotatoFromContext.single
+ * @see PotatoFromContext.many
  * @since 0.1.0
  */
 class Potato(
     val method: HttpMethod,
     val path: String,
     val body: PotatoBody?,
-    val settings: List<PotatoSetting> = listOf(),
-) {
+    val settings: List<PotatoSetting>,
+): FireablePotato {
     constructor(
         method: HttpMethod,
         path: String,
@@ -235,5 +251,22 @@ class Potato(
         @JvmStatic
         fun delete(path: String, body: PotatoBody, settings: List<PotatoSetting>) =
             build(HttpMethod.DELETE, path, body, settings)
+    }
+}
+
+class PotatoFromContext private constructor(
+    internal val builder: (ContextView) -> List<Potato>
+) : FireablePotato {
+
+    internal fun resolve(ctx: ContextView): List<Potato> = builder(ctx)
+
+    companion object {
+        @JvmStatic
+        fun single(builder: (ContextView) -> Potato) =
+            PotatoFromContext { ctx -> listOf(builder(ctx)) }
+
+        @JvmStatic
+        fun many(builder: (ContextView) -> List<Potato>) =
+            PotatoFromContext { ctx -> builder(ctx) }
     }
 }

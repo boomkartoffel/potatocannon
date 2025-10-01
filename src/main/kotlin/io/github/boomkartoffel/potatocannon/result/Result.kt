@@ -1,6 +1,12 @@
 package io.github.boomkartoffel.potatocannon.result
 
+import com.fasterxml.jackson.databind.node.NullNode
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.jayway.jsonpath.InvalidPathException
+import com.jayway.jsonpath.JsonPath
+import com.jayway.jsonpath.PathNotFoundException
 import io.github.boomkartoffel.potatocannon.exception.DeserializationFailureException
+import io.github.boomkartoffel.potatocannon.exception.JsonPathDecodingException
 import io.github.boomkartoffel.potatocannon.exception.ResponseBodyMissingException
 import io.github.boomkartoffel.potatocannon.marshalling.Deserializer
 import io.github.boomkartoffel.potatocannon.marshalling.JsonDeserializer
@@ -11,10 +17,13 @@ import io.github.boomkartoffel.potatocannon.potato.Potato
 import io.github.boomkartoffel.potatocannon.strategy.DeserializationStrategy
 import io.github.boomkartoffel.potatocannon.strategy.NegotiatedProtocol
 import java.nio.charset.Charset
+import com.fasterxml.jackson.databind.JsonNode as JacksonNode
 
 private val defaultCharset = Charsets.UTF_8
 private val defaultFormat = WireFormat.JSON
 private const val contentTypeHeaderName = "content-type"
+
+private val JSON_MAPPER = jacksonObjectMapper()
 
 /**
  * Immutable view of HTTP headers with case-insensitive lookup.
@@ -69,7 +78,7 @@ class Result internal constructor(
     //this is not a configuration, but a list of strategies that are necessary for deserialization, and it is not supposed to be accessed by the user
     internal val deserializationStrategies: List<DeserializationStrategy>,
     val attempts: Int,
-    val protocol : NegotiatedProtocol,
+    val protocol: NegotiatedProtocol,
 ) {
 
     /**
@@ -289,6 +298,121 @@ class Result internal constructor(
             ?.let { extractCharset(it) }
             ?: defaultCharset
     }
+
+    /**
+     * Evaluates a JSONPath expression (Jayway) against this response’s JSON body and returns
+     * a strict, fail-fast wrapper over the selected node.
+     *
+     * The underlying implementation is [Jayway JSONPath (2.9.0)](https://github.com/json-path/JsonPath).
+     *
+     * ### Behavior
+     * - Parses the response body as JSON, then evaluates the given JSONPath.
+     * - The raw JSONPath result (which may be a `scalar`, `List`, or `Map`) is normalized as a [PathMatch].
+     * - [PathMatch] is **strict**: it throws when the node is missing, or when accessing the data doesn't match the expected type (e.g., `"true"` is not a JSON boolean).
+     * - JSONPath **filters** and **wildcards** commonly produce arrays; index into them (e.g. `[0]`) or call
+     *   [PathMatch.asArray] to work with the elements in code.
+     *
+     * ### Errors
+     * - Throws [JsonPathDecodingException] if:
+     *   - the response body is not valid JSON,
+     *   - the JSONPath syntax is invalid, or
+     *   - the path cannot be resolved (no match).
+     *
+     * ### Examples
+     * Basic scalar:
+     * ```kotlin
+     * // Given: { "x": "y", "numbers": [1,2,3] }
+     * result.jsonPath("$.x").asText()                  // -> "y"
+     * result.jsonPath("$.numbers[0]").asInt()          // -> 1
+     * result.jsonPath("$.numbers")[0].asInt()          // -> 1
+     * ```
+     *
+     * Wildcards & slices:
+     * ```kotlin
+     * // Given: { "list": ["a", "b", "c"] }
+     * val list = result.jsonPath("$.list[*]").asArray()
+     * list.size()                 // -> 3
+     * list[1].asText()            // -> "b"
+     *
+     * result.jsonPath("$.list[1:3]").asArray()[0].asText()  // -> "b"
+     * result.jsonPath("$.list[1:3]")[0].asText()            // -> "b"
+     * ```
+     *
+     * Regex filters (Java regex):
+     * ```kotlin
+     * // Given:
+     * // { "items":[
+     * //   {"id":1,"name":"Banana"},
+     * //   {"id":2,"name":"apple"},
+     * //   {"id":3,"name":"blueberry"},
+     * //   {"id":4,"name":"Cherry"},
+     * //   {"id":5,"name":"beet"} ] }
+     * val matches = result
+     *   .jsonPath("$.items[?(@.name =~ /(?i)^b.*$/)].name")
+     *   .asArray()                // -> ["Banana","blueberry","beet"]
+     * ```
+     *
+     * Aggregates (Jayway functions):
+     * ```kotlin
+     * // Given: { "numbers": [1, 2, 3, 4.5] }
+     * result.jsonPath("$.numbers.max()").asDouble()  // -> 4.5
+     * result.jsonPath("$.numbers.sum()").asDouble()  // -> 10.5
+     * ```
+     *
+     * Cross-field comparison:
+     * ```kotlin
+     * // Given:
+     * // { "meta": { "maxPrice": 25.0 }, "items": [
+     * //   {"id":1,"name":"A","price":9.99},
+     * //   {"id":2,"name":"B","price":25.0},
+     * //   {"id":3,"name":"C","price":19.5},
+     * //   {"id":4,"name":"D","price":30.0} ] }
+     * val arr = result.jsonPath("$.items[?(@.price < $.meta.maxPrice)]").asArray()
+     * arr.size()                  // -> 2
+     * arr[0]["name"].asText()     // -> "A"
+     * arr[0]["price"].asDouble()  // -> 9.99
+     * arr.first()["name"].asText()     // -> "A"
+     * arr.first()["price"].asDouble()  // -> 9.99
+     * arr[1]["name"].asText()     // -> "C"
+     * arr[1]["price"].asDouble()  // -> 19.5
+     * ```
+     *
+     * @param expr JSONPath expression (Jayway syntax), e.g. `"$.nested[?(@.check==2)].value"`.
+     * @return A [PathMatch] wrapping the matched node; use its strict accessors (e.g., `asText()`, `asInt()`)
+     *         or `asArray()` for array results.
+     * @throws JsonPathDecodingException if parsing or path evaluation fails.
+     *
+     * @since 0.1.0
+     */
+    fun jsonPath(expr: String): PathMatch {
+        val jsonStr = responseText()
+
+        val compiled = try {
+            JsonPath.compile(expr)
+        } catch (e: InvalidPathException) {
+            throw JsonPathDecodingException("Failed to evaluate JSONPath '$expr'", e)
+        } catch (e: Exception) {
+            throw JsonPathDecodingException("Failed to evaluate JSONPath '$expr'", e)
+        }
+
+        var wasMissing = false
+        val raw: Any? = try {
+            JsonPath.parse(jsonStr).read<Any?>(compiled)
+        } catch (_: PathNotFoundException) {
+            wasMissing = true
+            null
+        } catch (e: Exception) {
+            throw JsonPathDecodingException("Failed to evaluate JSONPath '$expr'", e)
+        }
+
+        val node: JacksonNode? = when {
+            wasMissing -> null                                 // truly missing
+            raw == null -> NullNode.getInstance()              // present but JSON null
+            else -> JSON_MAPPER.valueToTree(raw)
+        }
+        return PathMatch(node, expr)
+    }
+
 
 }
 

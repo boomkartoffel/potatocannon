@@ -191,7 +191,7 @@ class Cannon {
      * @return A list of [Result] objects representing the responses.
      * @since 0.1.0
      */
-    fun fire(vararg potatoes: Potato): Cannon {
+    fun fire(vararg potatoes: FireablePotato): Cannon {
         fireWithResults(potatoes.toList())
         return this
     }
@@ -205,7 +205,7 @@ class Cannon {
      * @return A list of [Result] objects representing the responses.
      * @since 0.1.0
      */
-    fun fire(potatoes: List<Potato>): Cannon {
+    fun fire(potatoes: List<FireablePotato>): Cannon {
         fireWithResults(potatoes)
         return this
     }
@@ -219,7 +219,7 @@ class Cannon {
      * @return A list of [Result] objects representing the responses.
      * @since 0.1.0
      */
-    fun fireWithResults(vararg potatoes: Potato): List<Result> {
+    fun fireWithResults(vararg potatoes: FireablePotato): List<Result> {
         return fireWithResults(potatoes.toList())
     }
 
@@ -232,11 +232,24 @@ class Cannon {
      * @return A list of [Result] objects representing the responses.
      * @since 0.1.0
      */
-    fun fireWithResults(potatoes: List<Potato>): List<Result> {
+    fun fireWithResults(potatoes: List<FireablePotato>): List<Result> {
         val useGlobal = settings.asSequence().filterIsInstance<UseGlobalContext>().lastOrNull()
         val useSession = settings.lastSettingWithDefault<UseSessionContext>(UseSessionContext())
 
         val ctx = CompositeContext(useSession.ctx, useGlobal?.ctx)
+
+        val usedPotatoes: List<Potato> = potatoes.flatMap { p ->
+            when (p) {
+                is PotatoFromContext -> {
+                    try {
+                        p.resolve(ctx)
+                    } catch (t: Throwable) {
+                        throw RequestPreparationException("Failed to resolve PotatoFromContext", t)
+                    }
+                }
+                is Potato -> listOf(p)
+            }
+        }
 
         val configuredMode = settings.lastSettingWithDefault<FireMode>(FireMode.PARALLEL)
         val pacing = settings.lastSettingWithDefault<Pacing>(Pacing(0))
@@ -247,7 +260,7 @@ class Cannon {
         if (mode == FireMode.SEQUENTIAL) {
             var first = true
 
-            potatoes.forEach { potato ->
+            usedPotatoes.forEach { potato ->
                 if (!first && !pacing.isZeroPacing) Thread.sleep(pacing.intervalMillis(ctx))
                 first = false
 
@@ -265,7 +278,7 @@ class Cannon {
         val pool: ExecutorService = ParallelExecutorService.taskExecutor()
 
         try {
-            val tasks = potatoes.map { potato ->
+            val tasks = usedPotatoes.map { potato ->
                 Callable {
                     withPermit(permits) {
                         val effSettings = effectiveSettings(settings, potato.settings, ctx)

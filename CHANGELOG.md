@@ -11,8 +11,11 @@ All notable changes to this project will be documented here.
 - Ensured HTTP/1.1 and HTTP/2 support with Apache HttpClient
 
 ### Added
-- Shaded **Jackson library** and **Apache HttpClient** via ShadowJar to avoid dependency conflicts
+- Shaded **Jackson library**, **Apache HttpClient**, **Jayway JsonPath** via ShadowJar to avoid dependency conflicts
+- JsonPath support for advanced JSON querying
 - BackoffPolicy for retries
+- Global and Session contextual variables and access to them
+- Convenience serialization/deserialization methods for JSON and XML including annotations for basic customization
 
 ## [0.1.0-alpha] - 2025-09-01
 ### Added

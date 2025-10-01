@@ -21,6 +21,7 @@ val junitJupiterVersion = "5.13.1"
 val kotestVersion = "5.5.5"
 val slf4jVersion = "2.0.17"
 val apacheHttpClientVersion = "5.3.1"
+val jaywayJsonPathVersion = "2.9.0"
 
 
 group = "io.github.boomkartoffel"
@@ -41,6 +42,8 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
     implementation("org.apache.httpcomponents.client5:httpclient5:$apacheHttpClientVersion")
+    implementation("com.jayway.jsonpath:json-path:$jaywayJsonPathVersion")
+
 
     testImplementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
     testImplementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
@@ -98,6 +101,7 @@ tasks.named<ShadowJar>("shadowJar") {
     // Relocate Dependencies so they cannot clash with the app’s versions
     relocate("com.fasterxml.jackson", "io.github.boomkartoffel.shaded.com.fasterxml.jackson")
     relocate("org.apache.hc", "io.github.boomkartoffel.shaded.org.apache.hc")
+    relocate("com.jayway.jsonpath", "io.github.boomkartoffel.shaded.com.jayway.jsonpath")
 
 
     // Merge META-INF/services so jackson-module-kotlin is auto-discovered

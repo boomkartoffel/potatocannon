@@ -94,3 +94,8 @@ class RequestSendingFailureException internal constructor(
 class ContextFailureException internal constructor(
     message: String
 ) : PotatoCannonException(message)
+
+
+class JsonPathDecodingException(message: String, cause: Throwable? = null) : PotatoCannonException(message, cause)
+
+class JsonPathTypeException(message: String) : PotatoCannonException(message)

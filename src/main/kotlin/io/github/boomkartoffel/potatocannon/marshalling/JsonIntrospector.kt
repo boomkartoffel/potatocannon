@@ -22,12 +22,12 @@ internal class JsonIntrospector : JacksonAnnotationIntrospector() {
     override fun findNameForSerialization(a: Annotated): PropertyName? {
         a.getAnnotation(JsonName::class.java)?.let { return PropertyName(it.value) }
         // If we see our JSON-related annotations, ask Jackson to use default name
-        return super.findNameForSerialization(a) ?: if (hasJsonHint(a)) PropertyName.USE_DEFAULT else null
+        return super.findNameForSerialization(a)
     }
 
     override fun findNameForDeserialization(a: Annotated): PropertyName? {
         a.getAnnotation(JsonName::class.java)?.let { return PropertyName(it.value) }
-        return super.findNameForDeserialization(a) ?: if (hasJsonHint(a)) PropertyName.USE_DEFAULT else null
+        return super.findNameForDeserialization(a) ?: if (hasAlias(a)) PropertyName.USE_DEFAULT else null
     }
 
     // ---- Aliases (used for deserialization) ----
@@ -37,7 +37,7 @@ internal class JsonIntrospector : JacksonAnnotationIntrospector() {
     }
 
     override fun hasIgnoreMarker(m: AnnotatedMember): Boolean {
-        findAnnotationByReflection(m, JsonIgnore::class.java)?.let { return it.value }
+        findAnnotationByReflection(m, JsonIgnore::class.java)?.let { return true }
         return super.hasIgnoreMarker(m)
     }
 
@@ -47,17 +47,22 @@ internal class JsonIntrospector : JacksonAnnotationIntrospector() {
         return ann.value.toList().toTypedArray()
     }
 
-    private fun hasJsonHint(a: Annotated): Boolean =
+    private fun hasAlias(a: Annotated): Boolean =
         a.getAnnotation(JsonAliases::class.java) != null
 
     override fun findPropertyInclusion(a: Annotated): JsonInclude.Value? {
         val base = super.findPropertyInclusion(a)
         val ann = a.getAnnotation(JsonOmitNull::class.java) ?: return base
-        if (!ann.value) return base
 
-        // keep any existing settings and force value-inclusion = NON_NULL
+        // Preserve any existing settings (e.g., content inclusion), but override VALUE inclusion:
+        //  - value=true  → omit nulls      → NON_NULL
+        //  - value=false → include nulls   → ALWAYS (overrides any class-level NON_NULL)
         val start = base ?: JsonInclude.Value.empty()
-        return start.withValueInclusion(JsonInclude.Include.NON_NULL)
+        return if (ann.value) {
+            start.withValueInclusion(JsonInclude.Include.NON_NULL)
+        } else {
+            start.withValueInclusion(JsonInclude.Include.ALWAYS)
+        }
     }
 }
 

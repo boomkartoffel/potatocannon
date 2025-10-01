@@ -63,7 +63,7 @@ annotation class JsonName(val value: String)
  * Declares **additional accepted names** for a property during **deserialization**.
  * This is useful for backward/forward compatibility when field names change over time.
  *
- * During serialization, the primary name (possibly from {@link JsonName}) is used; aliases are ignored.
+ * During serialization, the primary name (possibly from [JsonName]) is used; aliases are ignored.
  *
  * ### Typical usage
  * ```kotlin
@@ -75,10 +75,6 @@ annotation class JsonName(val value: String)
  * // Accepts: {"userId": 7} or {"uid": 7} or {"id": 7}
  * ```
  *
- * ### Resolution rules (recommended)
- * - If both a primary name (`@JsonName`) and aliases are present in input, the first matching key wins.
- * - Libraries may define exact precedence; typically the primary name is preferred when multiple are present.
- *
  * @property value Alternative names accepted while reading input.
  */
 @Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY, AnnotationTarget.VALUE_PARAMETER)
@@ -88,9 +84,7 @@ annotation class JsonAliases(vararg val value: String)
 /**
  * Marks a property to be **ignored** for both serialization and deserialization.
  *
- * By default (`value = true`), the annotated member is excluded from the wire format.
- * If `value = false` is specified, consumers may interpret it as an explicit opt-in (useful
- * to override a class-level default that ignores members)—actual behavior depends on the mapper.
+ * The annotated member is excluded from the wire format.
  *
  * ### Typical usage
  * ```kotlin
@@ -106,19 +100,16 @@ annotation class JsonAliases(vararg val value: String)
  * record SecretsRecord(String publicInfo, @JsonIgnore String password) {}
  * ```
  *
- * @property value Whether the member should be ignored (`true`, default). Set to `false`
- *                 to explicitly **not** ignore (implementation-dependent).
  */
 @Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY, AnnotationTarget.VALUE_PARAMETER)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class JsonIgnore(val value: Boolean = true)
+annotation class JsonIgnore()
 
 /**
  * Controls the **serialization order** of properties on a class or record.
  *
  * Properties listed in `value` appear first and in the specified order. Properties not
- * listed should follow afterward (typically in declaration order), though exact behavior
- * may vary by mapper.
+ * listed should follow afterward (typically in declaration order), though exact behavior is not defined.
  *
  * ### Typical usage
  * ```kotlin
@@ -167,8 +158,8 @@ annotation class JsonPropertyOrder(vararg val value: String)
  * ### Notes
  * - Non-nullable properties in Kotlin cannot be `null` at runtime, so this mainly affects
  *   `T?` types or Java reference types.
- * - Setting `value = false` can force inclusion of `null` for a member on a class where
- *   nulls are omitted by default (mapper-dependent).
+ * - Setting `value = false` forces inclusion of `null` for a member on a class where
+ *   nulls are omitted by class-level annotation.
  *
  * @property value Whether to omit `null` values (`true`, default). Set to `false` to include `null`s.
  */
